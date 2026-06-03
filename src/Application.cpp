@@ -21,6 +21,7 @@
 #include "providers/bttv/BttvEmotes.hpp"
 #include "providers/ffz/FfzEmotes.hpp"
 #include "providers/kick/KickChatServer.hpp"
+#include "providers/repetitions/RepeatedMessageDetector.hpp"
 #include "providers/links/LinkResolver.hpp"
 #include "providers/pronouns/Pronouns.hpp"
 #include "providers/seventv/SeventvAPI.hpp"
@@ -202,6 +203,7 @@ Application::Application(Settings &_settings, const Paths &paths,
     , pronouns(new pronouns::Pronouns)
     , spellChecker(new SpellChecker)
     , kickChatServer(new KickChatServer)
+    , repeatedMessageDetector(new RepeatedMessageDetector)
 #ifdef CHATTERINO_HAVE_PLUGINS
     , plugins(new PluginController(paths))
 #endif
@@ -644,6 +646,13 @@ KickChatServer *Application::getKickChatServer()
     assert(this->kickChatServer);
 
     return this->kickChatServer.get();
+}
+
+RepeatedMessageDetector *Application::getRepeatedMessageDetector()
+{
+    assert(this->repeatedMessageDetector);
+
+    return this->repeatedMessageDetector.get();
 }
 
 void Application::aboutToQuit()

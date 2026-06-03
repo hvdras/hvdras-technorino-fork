@@ -43,6 +43,7 @@
 #include "providers/twitch/TwitchIrcServer.hpp"
 #include "providers/twitch/TwitchUsers.hpp"
 #include "providers/twitch/UserColor.hpp"
+#include "providers/repetitions/RepeatedMessageDetector.hpp"
 #include "singletons/Resources.hpp"
 #include "singletons/Settings.hpp"
 #include "singletons/StreamerMode.hpp"
@@ -584,6 +585,69 @@ EmotePtr parseEmote(TwitchChannel *twitchChannel, const QString &userID,
     }
 
     return {};
+}
+
+bool hasBadge(const QString &badges, const QString &badgeName)
+{
+    const auto prefix = badgeName % u"/"_s;
+    for (const auto &badge : badges.split(u',', Qt::SkipEmptyParts))
+    {
+        if (badge.startsWith(prefix))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+void appendRepeatedMessageCounter(chatterino::MessageBuilder &builder,
+                                  chatterino::Channel *channel,
+                                  const QVariantMap &tags,
+                                  const QString &content,
+                                  bool senderIsBroadcaster)
+{
+    using namespace chatterino;
+
+    auto *detector = getApp()->getRepeatedMessageDetector();
+    if (detector == nullptr)
+    {
+        return;
+    }
+
+    const auto badges = tags.value("badges").toString();
+    const RepeatedMessageCheck check{
+        .channelID = tags.value("room-id").toString(),
+        .userID = tags.value("user-id").toString(),
+        .messageID = tags.value("id").toString(),
+        .message = content,
+        .historical = tags.contains("historical"),
+        .channelCanModerate = channel->hasModRights(),
+        .senderIsModerator = tags.value("user-type").toString() == u"mod"_s ||
+                             hasBadge(badges, u"moderator"_s),
+        .senderIsBroadcaster = senderIsBroadcaster ||
+                               hasBadge(badges, u"broadcaster"_s),
+        .senderIsVip = hasBadge(badges, u"vip"_s),
+    };
+
+    auto count = detector->check(check);
+    if (!count)
+    {
+        return;
+    }
+
+    builder.message().flags.set(MessageFlag::RepeatedMessage);
+
+    QColor color(getSettings()->repeatedMessagesCounterColor.getValue());
+    if (!color.isValid())
+    {
+        color = QColor("#ff3b3b");
+    }
+
+    builder
+        .emplace<TextElement>(QStringLiteral("x%1").arg(*count),
+                              MessageElementFlag::RepeatedMessageCounter,
+                              MessageColor(color), FontStyle::ChatMedium)
+        ->setTrailingSpace(false);
 }
 
 }  // namespace
@@ -1960,6 +2024,9 @@ std::pair<MessagePtrMut, HighlightAlert> MessageBuilder::makeIrcMessage(
 
         builder.addWords(splits, twitchEmotes, textState);
     }
+
+    appendRepeatedMessageCounter(builder, channel, tags, content,
+                                 senderIsBroadcaster);
 
     QString stylizedUsername =
         stylizeUsername(builder->loginName, builder.message());

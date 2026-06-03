@@ -159,6 +159,161 @@ void TechnorinoPage::initLayout(GeneralPageView &layout)
                      "This will NOT guarantee exclusion from viewerlists.")
         ->addTo(layout);
 
+    layout.addTitle("Pinned Messages");
+    SettingWidget::checkbox("Show pinned message banner", s.enablePinnedMessages)
+        ->setTooltip("Show the pinned message banner above chat.")
+        ->addTo(layout);
+    SettingWidget::checkbox("Always expand long pinned messages",
+                            s.alwaysExpandPinnedMessages)
+        ->setTooltip("Automatically show the full content of long pins.")
+        ->addTo(layout);
+    SettingWidget::checkbox("Show unpin notifications in chat",
+                            s.showUnpinNotifications)
+        ->setTooltip("Show a chat message when a moderator unpins something.")
+        ->addTo(layout);
+    SettingWidget::checkbox("Move pin actions to Moderate menu",
+                            s.movePinToModerateMenu)
+        ->setTooltip(
+            "Put Pin and Unpin inside the Moderate submenu when right-clicking.")
+        ->addTo(layout);
+
+    layout.addDropdown<int>(
+        "Show pin button on moderators/broadcaster",
+        {"Never", "In moderation mode", "Always"},
+        s.showPinButtonOnModeratorsMode,
+        [](auto val) {
+            switch (val)
+            {
+                case 0: return QString("Never");
+                case 2: return QString("Always");
+                default: return QString("In moderation mode");
+            }
+        },
+        [](auto args) {
+            if (args.value == "Never") return 0;
+            if (args.value == "Always") return 2;
+            return 1;
+        },
+        false)
+        ->setToolTip("Controls the inline Pin action beside moderator messages.");
+
+    layout.addDropdown<int>(
+        "Pin close button action",
+        {"Hide banner here", "Unpin for everyone"},
+        s.pinCloseButtonAction,
+        [](auto val) {
+            return val == 1 ? QString("Unpin for everyone")
+                            : QString("Hide banner here");
+        },
+        [](auto args) { return args.value.startsWith("Unpin") ? 1 : 0; },
+        false)
+        ->setToolTip("What the close button does on a pinned message banner.");
+
+    layout.addDropdown<int>(
+        "Pin timer display",
+        {"Time + Countdown", "Time only", "Countdown only", "Hover only",
+         "Hidden"},
+        s.pinTimerDisplay,
+        [](auto val) {
+            switch (val)
+            {
+                case 1: return QString("Time only");
+                case 2: return QString("Countdown only");
+                case 3: return QString("Hover only");
+                case 4: return QString("Hidden");
+                default: return QString("Time + Countdown");
+            }
+        },
+        [](auto args) {
+            if (args.value == "Time only") return 1;
+            if (args.value == "Countdown only") return 2;
+            if (args.value == "Hover only") return 3;
+            if (args.value == "Hidden") return 4;
+            return 0;
+        },
+        false)
+        ->setToolTip("Choose how pin time is shown on the banner.");
+
+    layout.addDropdown<int>(
+        "Default pin duration",
+        {"Indefinite", "5 minutes", "10 minutes", "20 minutes", "30 minutes"},
+        s.defaultPinDuration,
+        [](auto val) {
+            if (val <= 0) return QString("Indefinite");
+            return QString::number(val / 60) + " minutes";
+        },
+        [](auto args) {
+            if (args.value == "Indefinite") return -1;
+            return args.value.split(' ')[0].toInt() * 60;
+        },
+        false)
+        ->setToolTip("How long pins last when no duration is given.");
+
+    layout.addTitle("Moderation");
+    SettingWidget::checkbox("Show repeated-message counters",
+                            s.enableRepeatedMessageDetector)
+        ->setTooltip("Show repeated or very similar messages with an inline "
+                     "counter such as x2, x3.")
+        ->addTo(layout);
+    SettingWidget::checkbox("Show only in moderation mode",
+                            s.repeatedMessagesShowOnlyModerationMode)
+        ->setTooltip("Only show repetition counters when inline mod buttons "
+                     "are visible.")
+        ->addTo(layout);
+    SettingWidget::checkbox("Show counters in usercards",
+                            s.repeatedMessagesShowInUsercards)
+        ->setTooltip(
+            "Show already-detected repeat counters in usercards when clicking "
+            "a user.")
+        ->addTo(layout);
+    SettingWidget::checkbox("Only in channels where I can moderate",
+                            s.repeatedMessagesOnlyModChannels)
+        ->setTooltip("Only show repeat counters in channels where you can "
+                     "moderate.")
+        ->addTo(layout);
+    SettingWidget::checkbox("Ignore VIPs", s.repeatedMessagesIgnoreVips)
+        ->setTooltip("Do not mark repeated messages from VIPs.")
+        ->addTo(layout);
+
+    layout.addDropdown<int>(
+        "Similarity sensitivity",
+        {"Loose", "Soft", "Default", "Strict", "Exact only"},
+        s.repeatedMessagesSensitivity,
+        [](auto val) {
+            switch (val)
+            {
+                case 0: return QString("Loose");
+                case 1: return QString("Soft");
+                case 3: return QString("Strict");
+                case 4: return QString("Exact only");
+                default: return QString("Default");
+            }
+        },
+        [](auto args) {
+            if (args.value == "Loose") return 0;
+            if (args.value == "Soft") return 1;
+            if (args.value == "Strict") return 3;
+            if (args.value == "Exact only") return 4;
+            return 2;
+        },
+        false)
+        ->setToolTip(
+            "How similar two messages need to be before they count as "
+            "repeated.");
+
+    SettingWidget::intInput("Repetition threshold",
+                            s.repeatedMessagesRepetitionThreshold,
+                            {.min = 2, .max = 20})
+        ->setTooltip(
+            "How many matching messages are required before the counter "
+            "appears.")
+        ->addTo(layout);
+
+    SettingWidget::colorButton("Repeat counter color",
+                               s.repeatedMessagesCounterColor)
+        ->setTooltip("Text color for the inline repeated-message counter.")
+        ->addTo(layout);
+
     layout.addStretch();
 
     // invisible element for width

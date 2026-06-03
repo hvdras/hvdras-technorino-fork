@@ -428,6 +428,8 @@ set(SOURCE_FILES
         providers/kick/KickApi.cpp
         providers/kick/KickApi.hpp
         providers/kick/KickBadges.cpp
+        providers/repetitions/RepeatedMessageDetector.cpp
+        providers/repetitions/RepeatedMessageDetector.hpp
         providers/kick/KickBadges.hpp
         providers/kick/KickChannel.cpp
         providers/kick/KickChannel.hpp
@@ -832,6 +834,8 @@ set(SOURCE_FILES
         widgets/helper/KickAccountSwitchWidget.hpp
         widgets/helper/MessageView.cpp
         widgets/helper/MessageView.hpp
+        widgets/helper/PinnedMessageBanner.cpp
+        widgets/helper/PinnedMessageBanner.hpp
         widgets/helper/MicroNotebook.cpp
         widgets/helper/MicroNotebook.hpp
         widgets/helper/NotebookTab.cpp

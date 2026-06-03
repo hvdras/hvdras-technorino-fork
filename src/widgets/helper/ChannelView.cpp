@@ -1561,6 +1561,12 @@ MessageElementFlags ChannelView::getFlags() const
         {
             flags.set(MessageElementFlag::ModeratorTools);
         }
+        if (getSettings()->enableRepeatedMessageDetector &&
+            (!getSettings()->repeatedMessagesShowOnlyModerationMode ||
+             split->getModerationMode()))
+        {
+            flags.set(MessageElementFlag::RepeatedMessageCounter);
+        }
         if (this->underlyingChannel_ ==
                 getApp()->getTwitch()->getMentionsChannel() ||
             this->underlyingChannel_ ==
@@ -1571,6 +1577,13 @@ MessageElementFlags ChannelView::getFlags() const
             flags.set(MessageElementFlag::ChannelName);
             flags.unset(MessageElementFlag::ChannelPointReward);
         }
+    }
+
+    if (this->context_ == Context::UserCard &&
+        getSettings()->enableRepeatedMessageDetector &&
+        getSettings()->repeatedMessagesShowInUsercards)
+    {
+        flags.set(MessageElementFlag::RepeatedMessageCounter);
     }
 
     if (getSettings()->hideMessageTimestampsWhenLive &&
