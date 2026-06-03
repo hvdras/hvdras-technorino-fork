@@ -850,6 +850,7 @@ public:
     BoolSetting requireAtForPinUserCommand{"/moltorino/pinnedMessages/requireAtForPinUserCommand", false};
     IntSetting pinTimerDisplay{"/moltorino/pinnedMessages/timerDisplay", 0};
     QStringSetting pinTimestampFormat{"/moltorino/pinnedMessages/timestampFormat", "Relative"};
+    QStringSetting pinBannerBackgroundColor{"/moltorino/pinnedMessages/customBackgroundColor", ""};
     BoolSetting movePinToModerateMenu{"/moltorino/pinnedMessages/movePinToModerateMenu", false};
     IntSetting showPinButtonOnModeratorsMode{"/moltorino/pinnedMessages/showPinButtonOnModeratorsMode", 1};
 

@@ -118,12 +118,6 @@ namespace {
         setPinnedBadgeFlag(flags, wordFlags, MessageElementFlag::BadgeSevenTV);
         setPinnedBadgeFlag(flags, wordFlags, MessageElementFlag::BadgeFfz);
         setPinnedBadgeFlag(flags, wordFlags, MessageElementFlag::BadgeBttv);
-        setPinnedBadgeFlag(flags, wordFlags,
-                           MessageElementFlag::BadgeHomiesSupporter);
-        setPinnedBadgeFlag(flags, wordFlags,
-                           MessageElementFlag::BadgeHomiesCustom);
-        setPinnedBadgeFlag(flags, wordFlags,
-                           MessageElementFlag::BadgeMoltorino);
 
         return flags;
     }
