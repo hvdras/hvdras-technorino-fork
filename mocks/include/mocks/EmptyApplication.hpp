@@ -314,6 +314,11 @@ public:
         return nullptr;
     }
 
+    RepeatedMessageDetector *getRepeatedMessageDetector() override
+    {
+        return nullptr;
+    }
+
     QTemporaryDir settingsDir;
     Paths paths_;
     Args args_;
