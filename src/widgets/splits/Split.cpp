@@ -1037,7 +1037,12 @@ void Split::setChannel(IndirectChannel newChannel)
             [this, tc](const bool &enabled, auto) {
                 if (enabled)
                 {
-                    tc->refreshPinnedMessage();
+                    // Show whatever is already cached; next pinnedMessageChanged
+                    // will update when something is pinned/unpinned.
+                    this->pinnedBanner_->setPinnedMessage(
+                        *tc->accessPinnedMessage(), tc);
+                    this->pinnedBanner_->setVisible(
+                        this->pinnedBanner_->hasPinnedMessage());
                     this->channelSignalHolder_.managedConnect(
                         tc->pinnedMessageChanged,
                         [this, tc] {
