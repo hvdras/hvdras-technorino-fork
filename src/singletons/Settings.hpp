@@ -837,23 +837,6 @@ public:
     IntSetting hideSimilarMaxMessagesToCheck = {
         "/similarity/hideSimilarMaxMessagesToCheck", 3};
 
-    // -- Pinned Messages --
-    BoolSetting enablePinnedMessages{"/moltorino/pinnedMessages/enabled", true};
-    BoolSetting alwaysExpandPinnedMessages{"/moltorino/pinnedMessages/alwaysExpand", false};
-    FloatSetting pinnedMessageScale{"/moltorino/pinnedMessages/scale", 1.f};
-    FloatSetting pinnedContentScale{"/moltorino/pinnedMessages/contentScale", 1.f};
-    BoolSetting showUnpinNotifications{"/moltorino/pinnedMessages/showUnpinNotifications", true};
-    IntSetting defaultPinDuration{"/moltorino/pinnedMessages/defaultDuration", -1};
-    IntSetting pinCloseButtonAction{"/moltorino/pinnedMessages/closeButtonAction", 1};
-    BoolSetting enablePinCommandMessages{"/moltorino/pinnedMessages/enablePinCommandMessages", true};
-    BoolSetting enablePinUserCommand{"/moltorino/pinnedMessages/enablePinUserCommand", true};
-    BoolSetting requireAtForPinUserCommand{"/moltorino/pinnedMessages/requireAtForPinUserCommand", false};
-    IntSetting pinTimerDisplay{"/moltorino/pinnedMessages/timerDisplay", 0};
-    QStringSetting pinTimestampFormat{"/moltorino/pinnedMessages/timestampFormat", "Relative"};
-    QStringSetting pinBannerBackgroundColor{"/moltorino/pinnedMessages/customBackgroundColor", ""};
-    BoolSetting movePinToModerateMenu{"/moltorino/pinnedMessages/movePinToModerateMenu", false};
-    IntSetting showPinButtonOnModeratorsMode{"/moltorino/pinnedMessages/showPinButtonOnModeratorsMode", 1};
-
     // -- Repeated Message Detector --
     BoolSetting enableRepeatedMessageDetector{"/moltorino/moderation/repeatedMessages/enabled", true};
     BoolSetting repeatedMessagesShowOnlyModerationMode{"/moltorino/moderation/repeatedMessages/showOnlyModerationMode", true};

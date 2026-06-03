@@ -834,8 +834,6 @@ set(SOURCE_FILES
         widgets/helper/KickAccountSwitchWidget.hpp
         widgets/helper/MessageView.cpp
         widgets/helper/MessageView.hpp
-        widgets/helper/PinnedMessageBanner.cpp
-        widgets/helper/PinnedMessageBanner.hpp
         widgets/helper/MicroNotebook.cpp
         widgets/helper/MicroNotebook.hpp
         widgets/helper/NotebookTab.cpp

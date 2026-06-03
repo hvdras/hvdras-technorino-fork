@@ -19,7 +19,6 @@
 namespace chatterino {
 
 class ChannelView;
-class PinnedMessageBanner;
 class SplitHeader;
 class SplitInput;
 class SplitContainer;
@@ -165,7 +164,6 @@ private:
 
     QVBoxLayout *const vbox_;
     SplitHeader *const header_;
-    PinnedMessageBanner *const pinnedBanner_;
     ChannelView *const view_;
     SplitInput *const input_;
     SplitOverlay *const overlay_;

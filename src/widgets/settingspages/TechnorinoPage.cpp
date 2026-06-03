@@ -1,4 +1,4 @@
-#include "widgets/settingspages/TechnorinoPage.hpp"
+﻿#include "widgets/settingspages/TechnorinoPage.hpp"
 
 #include "Application.hpp"
 #include "common/Literals.hpp"
@@ -159,96 +159,6 @@ void TechnorinoPage::initLayout(GeneralPageView &layout)
                      "This will NOT guarantee exclusion from viewerlists.")
         ->addTo(layout);
 
-    layout.addTitle("Pinned Messages");
-    SettingWidget::checkbox("Show pinned message banner", s.enablePinnedMessages)
-        ->setTooltip("Show the pinned message banner above chat.")
-        ->addTo(layout);
-    SettingWidget::checkbox("Always expand long pinned messages",
-                            s.alwaysExpandPinnedMessages)
-        ->setTooltip("Automatically show the full content of long pins.")
-        ->addTo(layout);
-    SettingWidget::checkbox("Show unpin notifications in chat",
-                            s.showUnpinNotifications)
-        ->setTooltip("Show a chat message when a moderator unpins something.")
-        ->addTo(layout);
-    SettingWidget::checkbox("Move pin actions to Moderate menu",
-                            s.movePinToModerateMenu)
-        ->setTooltip(
-            "Put Pin and Unpin inside the Moderate submenu when right-clicking.")
-        ->addTo(layout);
-
-    layout.addDropdown<int>(
-        "Show pin button on moderators/broadcaster",
-        {"Never", "In moderation mode", "Always"},
-        s.showPinButtonOnModeratorsMode,
-        [](auto val) {
-            switch (val)
-            {
-                case 0: return QString("Never");
-                case 2: return QString("Always");
-                default: return QString("In moderation mode");
-            }
-        },
-        [](auto args) {
-            if (args.value == "Never") return 0;
-            if (args.value == "Always") return 2;
-            return 1;
-        },
-        false)
-        ->setToolTip("Controls the inline Pin action beside moderator messages.");
-
-    layout.addDropdown<int>(
-        "Pin close button action",
-        {"Hide banner here", "Unpin for everyone"},
-        s.pinCloseButtonAction,
-        [](auto val) {
-            return val == 1 ? QString("Unpin for everyone")
-                            : QString("Hide banner here");
-        },
-        [](auto args) { return args.value.startsWith("Unpin") ? 1 : 0; },
-        false)
-        ->setToolTip("What the close button does on a pinned message banner.");
-
-    layout.addDropdown<int>(
-        "Pin timer display",
-        {"Time + Countdown", "Time only", "Countdown only", "Hover only",
-         "Hidden"},
-        s.pinTimerDisplay,
-        [](auto val) {
-            switch (val)
-            {
-                case 1: return QString("Time only");
-                case 2: return QString("Countdown only");
-                case 3: return QString("Hover only");
-                case 4: return QString("Hidden");
-                default: return QString("Time + Countdown");
-            }
-        },
-        [](auto args) {
-            if (args.value == "Time only") return 1;
-            if (args.value == "Countdown only") return 2;
-            if (args.value == "Hover only") return 3;
-            if (args.value == "Hidden") return 4;
-            return 0;
-        },
-        false)
-        ->setToolTip("Choose how pin time is shown on the banner.");
-
-    layout.addDropdown<int>(
-        "Default pin duration",
-        {"Indefinite", "5 minutes", "10 minutes", "20 minutes", "30 minutes"},
-        s.defaultPinDuration,
-        [](auto val) {
-            if (val <= 0) return QString("Indefinite");
-            return QString::number(val / 60) + " minutes";
-        },
-        [](auto args) {
-            if (args.value == "Indefinite") return -1;
-            return args.value.split(' ')[0].toInt() * 60;
-        },
-        false)
-        ->setToolTip("How long pins last when no duration is given.");
-
     layout.addTitle("Moderation");
     SettingWidget::checkbox("Show repeated-message counters",
                             s.enableRepeatedMessageDetector)
@@ -342,3 +252,4 @@ void TechnorinoPage::initExtra()
 }
 
 }  // namespace chatterino
+
