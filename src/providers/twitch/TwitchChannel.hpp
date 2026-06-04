@@ -21,7 +21,9 @@
 #include <IrcMessage>
 #include <pajlada/signals/signalholder.hpp>
 #include <QColor>
+#include <QDateTime>
 #include <QElapsedTimer>
+#include <QJsonObject>
 #include <QRegularExpression>
 
 #include <atomic>
@@ -162,6 +164,21 @@ public:
         int slowMode = 0;
     };
 
+    struct PinnedMessage {
+        QString pinId;
+        QString messageId;
+        QString text;
+        QString authorId;
+        QString authorName;
+        QString authorLogin;
+        QString authorColor;
+        QString authorBadges;
+        QString pinnerName;
+        QString pinnerLogin;
+        std::optional<QDateTime> endsAt;
+        std::optional<QDateTime> pinnedAt;
+    };
+
     explicit TwitchChannel(const QString &channelName, bool isWatching = false);
     ~TwitchChannel() override;
 
@@ -218,6 +235,10 @@ public:
     QString roomId() const;
     SharedAccessGuard<const RoomModes> accessRoomModes() const;
     SharedAccessGuard<const StreamStatus> accessStreamStatus() const;
+    SharedAccessGuard<const std::optional<PinnedMessage>> accessPinnedMessage() const;
+    void setPinnedMessage(std::optional<PinnedMessage> pin);
+    void refreshPinnedMessage();
+    void handlePinnedChatUpdate(const QJsonObject &data);
 
     /**
      * Records that the channel is no longer joined.
@@ -349,6 +370,7 @@ public:
     pajlada::Signals::NoArgSignal streamStatusChanged;
 
     pajlada::Signals::NoArgSignal roomModesChanged;
+    pajlada::Signals::NoArgSignal pinnedMessageChanged;
 
     pajlada::Signals::NoArgSignal destroyed;
 
@@ -514,6 +536,8 @@ private:
     int chatterCount_{};
     UniqueAccess<StreamStatus> streamStatus_;
     UniqueAccess<RoomModes> roomModes;
+    UniqueAccess<std::optional<PinnedMessage>> currentPin_;
+    std::atomic<int> pinnedMessageRefreshFailures_{0};
     bool disconnected_{};
     std::optional<std::chrono::time_point<std::chrono::system_clock>>
         lastConnectedAt_{};

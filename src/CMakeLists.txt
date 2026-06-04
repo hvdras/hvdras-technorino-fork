@@ -559,6 +559,8 @@ set(SOURCE_FILES
         providers/twitch/pubsubmessages/Listen.cpp
         providers/twitch/pubsubmessages/Listen.hpp
         providers/twitch/pubsubmessages/Message.hpp
+        providers/twitch/pubsubmessages/PinnedChat.cpp
+        providers/twitch/pubsubmessages/PinnedChat.hpp
         providers/twitch/pubsubmessages/Unlisten.cpp
         providers/twitch/pubsubmessages/Unlisten.hpp
 
@@ -838,6 +840,8 @@ set(SOURCE_FILES
         widgets/helper/KickAccountSwitchWidget.hpp
         widgets/helper/MessageView.cpp
         widgets/helper/MessageView.hpp
+        widgets/helper/PinnedMessageBanner.cpp
+        widgets/helper/PinnedMessageBanner.hpp
         widgets/helper/MicroNotebook.cpp
         widgets/helper/MicroNotebook.hpp
         widgets/helper/NotebookTab.cpp

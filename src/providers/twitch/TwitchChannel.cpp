@@ -1591,6 +1591,7 @@ void TwitchChannel::refreshPubSub()
     auto currentAccount = getApp()->getAccounts()->twitch.getCurrent();
 
     getApp()->getTwitchPubSub()->listenToChannelPointRewards(roomId);
+    getApp()->getTwitchPubSub()->listenToPinnedChatUpdates(roomId);
 
     if (currentAccount->isAnon())
     {
@@ -2552,6 +2553,156 @@ void TwitchChannel::setSendWait(int seconds)
 bool TwitchChannel::isLoadingRecentMessages() const
 {
     return this->loadingRecentMessages_.test();
+}
+
+SharedAccessGuard<const std::optional<TwitchChannel::PinnedMessage>>
+    TwitchChannel::accessPinnedMessage() const
+{
+    return this->currentPin_.accessConst();
+}
+
+void TwitchChannel::setPinnedMessage(std::optional<PinnedMessage> pin)
+{
+    {
+        auto locked = this->currentPin_.access();
+        if (!locked->has_value() && !pin.has_value())
+        {
+            return;
+        }
+        *locked = std::move(pin);
+    }
+    this->pinnedMessageChanged.invoke();
+}
+
+void TwitchChannel::refreshPinnedMessage()
+{
+    if (!getSettings()->enablePinnedMessages || this->roomId().isEmpty())
+    {
+        return;
+    }
+    // No GQL refresh available; pin state is driven entirely by PubSub events.
+}
+
+void TwitchChannel::handlePinnedChatUpdate(const QJsonObject &data)
+{
+    const QString type = data.value("type").toString();
+    const auto innerDataValue = data.value("data");
+    const auto innerData =
+        innerDataValue.isObject() ? innerDataValue.toObject() : QJsonObject{};
+
+    if (type == QStringLiteral("pin-message") ||
+        type == QStringLiteral("update-message"))
+    {
+        PinnedMessage pin;
+
+        if (innerData.contains("id"))
+        {
+            pin.pinId = innerData["id"].toString();
+        }
+
+        const auto msgObj = innerData.value("message").toObject();
+        if (!msgObj.isEmpty())
+        {
+            pin.messageId = msgObj["id"].toString();
+
+            const auto contentObj = msgObj.value("content").toObject();
+            if (!contentObj.isEmpty())
+            {
+                pin.text = contentObj["text"].toString();
+            }
+
+            const auto senderObj = msgObj.value("sender").toObject();
+            if (!senderObj.isEmpty())
+            {
+                pin.authorId = senderObj["user_id"].toString();
+                pin.authorLogin = senderObj["login"].toString();
+                pin.authorName = senderObj.contains("display_name")
+                                     ? senderObj["display_name"].toString()
+                                     : pin.authorLogin;
+            }
+        }
+
+        if (const auto pinnedByObj = innerData.value("pinned_by").toObject();
+            !pinnedByObj.isEmpty())
+        {
+            pin.pinnerLogin = pinnedByObj["login"].toString();
+            pin.pinnerName = pinnedByObj.contains("display_name")
+                                 ? pinnedByObj["display_name"].toString()
+                                 : pin.pinnerLogin;
+        }
+
+        if (innerData.contains("ends_at"))
+        {
+            pin.endsAt = QDateTime::fromString(
+                innerData["ends_at"].toString(), Qt::ISODate);
+        }
+        if (innerData.contains("starts_at"))
+        {
+            pin.pinnedAt = QDateTime::fromString(
+                innerData["starts_at"].toString(), Qt::ISODate);
+        }
+
+        // Fill in author details from channel message snapshot if available
+        if (!pin.messageId.isEmpty())
+        {
+            const auto snapshot = this->getMessageSnapshot();
+            for (const auto &msg : snapshot)
+            {
+                if (msg && msg->id == pin.messageId)
+                {
+                    if (pin.authorId.isEmpty())
+                    {
+                        pin.authorId = msg->userID;
+                    }
+                    if (pin.authorLogin.isEmpty())
+                    {
+                        pin.authorLogin = msg->loginName;
+                    }
+                    if (pin.authorName.isEmpty())
+                    {
+                        pin.authorName = msg->displayName.isEmpty()
+                                             ? msg->loginName
+                                             : msg->displayName;
+                    }
+                    if (pin.text.isEmpty())
+                    {
+                        pin.text = msg->messageText;
+                    }
+                    break;
+                }
+            }
+        }
+
+        this->setPinnedMessage(std::move(pin));
+    }
+    else if (type == QStringLiteral("unpin-message"))
+    {
+        if (getSettings()->showUnpinNotifications)
+        {
+            QString unpinnerName;
+            if (const auto unpinnedBy =
+                    innerData.value("unpinned_by").toObject();
+                !unpinnedBy.isEmpty())
+            {
+                unpinnerName = unpinnedBy["display_name"].toString();
+                if (unpinnerName.isEmpty())
+                {
+                    unpinnerName = unpinnedBy["login"].toString();
+                }
+            }
+
+            if (unpinnerName.isEmpty())
+            {
+                this->addSystemMessage("Pinned message was removed.");
+            }
+            else
+            {
+                this->addSystemMessage(
+                    QString("%1 unpinned the message.").arg(unpinnerName));
+            }
+        }
+        this->setPinnedMessage(std::nullopt);
+    }
 }
 
 }  // namespace chatterino

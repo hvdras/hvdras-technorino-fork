@@ -162,6 +162,15 @@ void PubSubClient::handleResponse(const PubSubMessage &message)
 
 void PubSubClient::handleMessageResponse(const PubSubMessageMessage &message)
 {
+    if (message.topic.startsWith("pinned-chat-updates-v1."))
+    {
+        // Extract channelID from topic "pinned-chat-updates-v1.{channelID}"
+        const auto channelID =
+            message.topic.mid(QString("pinned-chat-updates-v1.").length());
+        this->manager_.pinnedChat.updated.invoke(channelID, message.data);
+        return;
+    }
+
     if (!message.topic.startsWith("community-points-channel-v1."))
     {
         return;

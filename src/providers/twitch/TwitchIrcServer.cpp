@@ -230,6 +230,22 @@ void TwitchIrcServer::initialize()
         });
 
     this->signalHolder.managedConnect(
+        getApp()->getTwitchPubSub()->pinnedChat.updated,
+        [this](const QString &channelID, const QJsonObject &data) {
+            auto chan = this->getChannelOrEmptyByID(channelID);
+            postToThread([chan, data] {
+                if (isAppAboutToQuit())
+                {
+                    return;
+                }
+                if (auto *channel = dynamic_cast<TwitchChannel *>(chan.get()))
+                {
+                    channel->handlePinnedChatUpdate(data);
+                }
+            });
+        });
+
+    this->signalHolder.managedConnect(
         getApp()->getTwitchPubSub()->pointReward.redeemed, [this](auto &data) {
             QString channelId = data.value("channel_id").toString();
             if (channelId.isEmpty())

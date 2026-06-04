@@ -31,6 +31,7 @@
 #include "widgets/dialogs/SelectChannelFiltersDialog.hpp"
 #include "widgets/dialogs/UserInfoPopup.hpp"
 #include "widgets/helper/ChannelView.hpp"
+#include "widgets/helper/PinnedMessageBanner.hpp"
 #include "widgets/helper/DebugPopup.hpp"
 #include "widgets/helper/NotebookTab.hpp"
 #include "widgets/helper/ResizingTextEdit.hpp"
@@ -93,6 +94,7 @@ Split::Split(QWidget *parent)
     , channel_(Channel::getEmpty())
     , vbox_(new QVBoxLayout(this))
     , header_(new SplitHeader(this))
+    , pinnedBanner_(new PinnedMessageBanner(this, this))
     , view_(new ChannelView(this, this, ChannelView::Context::None,
                             getSettings()->scrollbackSplitLimit))
     , input_(new SplitInput(this))
@@ -107,6 +109,7 @@ Split::Split(QWidget *parent)
     this->vbox_->setContentsMargins(1, 1, 1, 1);
 
     this->vbox_->addWidget(this->header_);
+    this->vbox_->addWidget(this->pinnedBanner_);
     this->vbox_->addWidget(this->view_, 1);
     this->vbox_->addWidget(this->input_);
 
@@ -952,6 +955,8 @@ void Split::setChannel(IndirectChannel newChannel)
     this->indirectChannelChangedConnection_.disconnect();
     this->channelSignalHolder_.clear();
 
+    this->pinnedBanner_->setPinnedMessage(std::nullopt, nullptr);
+
     TwitchChannel *tc = dynamic_cast<TwitchChannel *>(newChannel.get().get());
     auto *kc = dynamic_cast<KickChannel *>(newChannel.get().get());
     auto *mc = dynamic_cast<MultiChannel *>(newChannel.get().get());
@@ -977,6 +982,79 @@ void Split::setChannel(IndirectChannel newChannel)
         this->channelSignalHolder_.managedConnect(
             tc->sendWaitUpdate, [this](const QString &text) {
                 this->getInput().setSendWaitStatus(text);
+            });
+
+        if (getSettings()->enablePinnedMessages)
+        {
+            auto updatePin = [this, tc] {
+                this->pinnedBanner_->setPinnedMessage(
+                    *tc->accessPinnedMessage(), tc);
+                this->pinnedBanner_->setVisible(
+                    this->pinnedBanner_->hasPinnedMessage());
+            };
+
+            this->channelSignalHolder_.managedConnect(
+                tc->pinnedMessageChanged, updatePin);
+
+            this->channelSignalHolder_.managedConnect(
+                tc->messageReplaced,
+                [this, tc](size_t, const MessagePtr &,
+                           const MessagePtr &replacement) {
+                    auto pin = tc->accessPinnedMessage();
+                    if (pin->has_value() && !(*pin)->messageId.isEmpty() &&
+                        replacement->id == (*pin)->messageId)
+                    {
+                        this->pinnedBanner_->setPinnedMessage(*pin, tc);
+                    }
+                });
+
+            this->channelSignalHolder_.managedConnect(
+                tc->messageAppended,
+                [this, tc](MessagePtr &msg, std::optional<MessageFlags>) {
+                    auto pin = tc->accessPinnedMessage();
+                    if (pin->has_value() && !(*pin)->authorLogin.isEmpty() &&
+                        msg->loginName.compare((*pin)->authorLogin,
+                                               Qt::CaseInsensitive) == 0)
+                    {
+                        this->pinnedBanner_->refreshLayout();
+                    }
+                });
+
+            updatePin();
+        }
+        else
+        {
+            this->pinnedBanner_->hide();
+        }
+
+        getSettings()->enablePinnedMessages.connect(
+            [this, tc](const bool &enabled, auto) {
+                if (enabled)
+                {
+                    this->pinnedBanner_->setPinnedMessage(
+                        *tc->accessPinnedMessage(), tc);
+                    this->pinnedBanner_->setVisible(
+                        this->pinnedBanner_->hasPinnedMessage());
+                    this->channelSignalHolder_.managedConnect(
+                        tc->pinnedMessageChanged,
+                        [this, tc] {
+                            this->pinnedBanner_->setPinnedMessage(
+                                *tc->accessPinnedMessage(), tc);
+                            this->pinnedBanner_->setVisible(
+                                this->pinnedBanner_->hasPinnedMessage());
+                        });
+                }
+                else
+                {
+                    this->pinnedBanner_->setPinnedMessage(std::nullopt, tc);
+                    this->pinnedBanner_->hide();
+                }
+            },
+            this->channelSignalHolder_);
+
+        this->channelSignalHolder_.managedConnect(
+            this->pinnedBanner_->dismissed, [this] {
+                this->pinnedBanner_->setVisible(false);
             });
     }
     else if (kc != nullptr)
