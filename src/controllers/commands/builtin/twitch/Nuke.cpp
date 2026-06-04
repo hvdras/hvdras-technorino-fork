@@ -1147,6 +1147,8 @@ void startNukeJob(const CommandContext &ctx, const ParseResult &plan)
     maybeFinishNukeJob(job);
 }
 
+}  // namespace
+
 namespace chatterino::commands {
 
 NukePreview buildNukePreview(const QString &input, const ChannelPtr &channel)
@@ -1198,9 +1200,7 @@ QString sendNuke(const CommandContext &ctx)
         return "";
     }
 
-    const auto commandText = ctx.rawText.isEmpty()
-                                 ? ctx.words.join(QLatin1Char(' '))
-                                 : ctx.rawText;
+    const auto commandText = ctx.words.join(QLatin1Char(' '));
     const auto parsed = parseNukeInput(commandText, false);
     if (parsed.isStop)
     {
