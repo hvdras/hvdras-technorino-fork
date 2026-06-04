@@ -224,11 +224,13 @@ void SplitContainer::addSplit(Split *split)
     auto &&conns = this->connectionsPerSplit_[split];
 
     conns.managedConnect(split->getChannelView().tabHighlightRequested,
-                         [this, split](const TabHighlight &highlight) {
+                         [this, split](HighlightState state,
+                                       std::shared_ptr<QColor> color) {
                              if (this->tab_ != nullptr)
                              {
                                  this->tab_->updateHighlightState(
-                                     highlight, split->getChannelView());
+                                     TabHighlight{state, std::move(color)},
+                                     split->getChannelView());
                              }
                          });
 
