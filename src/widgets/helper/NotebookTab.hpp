@@ -77,7 +77,8 @@ public:
      *
      * Obeys the HighlightsEnabled setting and the highlight state hierarchy and tracks the highlight state update sources
      */
-    void updateHighlightState(const TabHighlight &highlight,
+    void updateHighlightState(HighlightState state,
+                              std::shared_ptr<QColor> color,
                               const ChannelView &channelViewSource);
     void copyHighlightStateAndSourcesFrom(const NotebookTab *sourceTab);
     void setHighlightsEnabled(const bool &newVal);

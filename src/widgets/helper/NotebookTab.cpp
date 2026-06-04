@@ -772,9 +772,11 @@ void NotebookTab::setHighlightState(HighlightState newHighlightStyle)
     this->update();
 }
 
-void NotebookTab::updateHighlightState(const TabHighlight &highlight,
+void NotebookTab::updateHighlightState(HighlightState state,
+                                       std::shared_ptr<QColor> color,
                                        const ChannelView &channelViewSource)
 {
+    const TabHighlight highlight{state, std::move(color)};
     const auto newHighlightStyle = highlight.state;
 
     if (this->isSelected())
