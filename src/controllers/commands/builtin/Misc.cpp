@@ -5,6 +5,7 @@
 #include "controllers/commands/builtin/Misc.hpp"
 
 #include "Application.hpp"
+#include "providers/translation/Translator.hpp"
 #include "common/Channel.hpp"
 #include "controllers/accounts/AccountController.hpp"
 #include "controllers/commands/CommandContext.hpp"
@@ -813,6 +814,177 @@ QString openLogs(const CommandContext &ctx)
     }
 
     return "";
+}
+
+// ---- Translation helpers ----
+
+namespace {
+
+QString commandWordsAfter(const CommandContext &ctx, int wordCount)
+{
+    return ctx.words.mid(wordCount).join(QLatin1Char(' ')).trimmed();
+}
+
+QString supportedTranslationLanguageText()
+{
+    QStringList names;
+    for (const auto &lang : supportedTranslationLanguages())
+    {
+        names.append(lang.name);
+    }
+    return names.join(QStringLiteral(", "));
+}
+
+void addTranslationSystemMessage(const ChannelPtr &channel,
+                                 const TranslationResult &result,
+                                 const QString &targetLanguage)
+{
+    const auto targetName = translationLanguageName(targetLanguage);
+    const auto detectedLanguage =
+        normalizedLanguageCode(result.detectedLanguage);
+    const auto detectedName = translationLanguageName(detectedLanguage);
+
+    QString prefix = QStringLiteral("Translation");
+    if (!detectedName.isEmpty() && detectedLanguage != targetLanguage)
+    {
+        prefix += QStringLiteral(" (%1 -> %2)").arg(detectedName, targetName);
+    }
+    else if (!targetName.isEmpty())
+    {
+        prefix += QStringLiteral(" (%1)").arg(targetName);
+    }
+
+    channel->addSystemMessage(
+        QStringLiteral("%1: %2").arg(prefix, result.translatedText.trimmed()));
+}
+
+QString runTranslatePreviewCommand(const CommandContext &ctx,
+                                   const QString &targetLanguage,
+                                   const QString &message,
+                                   const QString &usage)
+{
+    if (ctx.channel == nullptr)
+    {
+        return "";
+    }
+
+    if (message.isEmpty())
+    {
+        ctx.channel->addSystemMessage(usage);
+        return "";
+    }
+
+    requestTextTranslation(
+        message, targetLanguage, nullptr,
+        [channel = ctx.channel, targetLanguage](
+            const TranslationResult &result) {
+            addTranslationSystemMessage(channel, result, targetLanguage);
+        },
+        [channel = ctx.channel](const QString &) {
+            channel->addSystemMessage(
+                QStringLiteral("Translation failed. Try again later."));
+        });
+
+    return "";
+}
+
+QString runTranslateSendCommand(const CommandContext &ctx,
+                                const QString &targetLanguage,
+                                const QString &message)
+{
+    if (ctx.channel == nullptr)
+    {
+        return "";
+    }
+
+    if (message.isEmpty())
+    {
+        ctx.channel->addSystemMessage("Usage: /tl <language> <message>");
+        return "";
+    }
+
+    constexpr int TWITCH_MESSAGE_LIMIT = 500;
+    requestTextTranslation(
+        message, targetLanguage, nullptr,
+        [channel = ctx.channel](const TranslationResult &result) {
+            auto translatedText = result.translatedText.trimmed();
+            translatedText.replace('\n', ' ');
+            if (translatedText.isEmpty())
+            {
+                channel->addSystemMessage(
+                    QStringLiteral("Translation failed, so nothing was sent."));
+                return;
+            }
+            if (translatedText.size() > TWITCH_MESSAGE_LIMIT)
+            {
+                channel->addSystemMessage(QStringLiteral(
+                    "The translated message is too long for Twitch."));
+                return;
+            }
+            channel->sendMessage(translatedText);
+        },
+        [channel = ctx.channel](const QString &) {
+            channel->addSystemMessage(
+                QStringLiteral("Translation failed, so nothing was sent."));
+        });
+
+    return "";
+}
+
+}  // namespace
+
+// ---- Translation commands ----
+
+QString translate(const CommandContext &ctx)
+{
+    const auto targetLanguage = normalizedTranslationTargetLanguage(
+        getSettings()->messageTranslationTargetLanguage.getValue());
+    return runTranslatePreviewCommand(
+        ctx, targetLanguage, commandWordsAfter(ctx, 1),
+        QStringLiteral("Usage: /translate <message>"));
+}
+
+QString translateTo(const CommandContext &ctx)
+{
+    if (ctx.channel == nullptr)
+    {
+        return "";
+    }
+
+    const auto targetLanguage =
+        translationLanguageCodeFromInput(ctx.words.value(1));
+    if (targetLanguage.isEmpty())
+    {
+        ctx.channel->addSystemMessage(
+            QStringLiteral("Usage: /translateto <language> <message> (%1)")
+                .arg(supportedTranslationLanguageText()));
+        return "";
+    }
+
+    return runTranslatePreviewCommand(
+        ctx, targetLanguage, commandWordsAfter(ctx, 2),
+        QStringLiteral("Usage: /translateto <language> <message>"));
+}
+
+QString sayTranslate(const CommandContext &ctx)
+{
+    if (ctx.channel == nullptr)
+    {
+        return "";
+    }
+
+    const auto targetLanguage =
+        translationLanguageCodeFromInput(ctx.words.value(1));
+    if (targetLanguage.isEmpty())
+    {
+        ctx.channel->addSystemMessage(
+            QStringLiteral("Usage: /tl <language> <message> (%1)")
+                .arg(supportedTranslationLanguageText()));
+        return "";
+    }
+
+    return runTranslateSendCommand(ctx, targetLanguage,
+                                   commandWordsAfter(ctx, 2));
 }
 
 }  // namespace chatterino::commands

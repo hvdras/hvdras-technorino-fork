@@ -159,6 +159,59 @@ void TechnorinoPage::initLayout(GeneralPageView &layout)
                      "This will NOT guarantee exclusion from viewerlists.")
         ->addTo(layout);
 
+    layout.addTitle("Miscellaneous");
+    SettingWidget::checkbox("Use message colors for tab alerts",
+                            s.colorTabHighlightsByMessage)
+        ->setTooltip("When a message highlights a tab, use the message's "
+                     "highlight color for the tab indicator line.")
+        ->addTo(layout);
+    SettingWidget::checkbox("Show follow button in chat header",
+                            s.showFollowButtonInSplitHeader)
+        ->setTooltip("Show a follow button in the split header.")
+        ->addTo(layout);
+    SettingWidget::checkbox("Confirm before unfollowing from chat header",
+                            s.confirmUnfollowFromSplitHeader)
+        ->setTooltip("Ask for confirmation before unfollowing from the split "
+                     "header button.")
+        ->addTo(layout);
+    SettingWidget::checkbox("Hide mod actions on moderator usercards",
+                            s.hideModActionsOnModUsercards)
+        ->setTooltip(
+            "Do not show timeout/ban buttons when clicking a moderator's "
+            "name in chat.")
+        ->addTo(layout);
+    SettingWidget::checkbox("Show mod actions on mod usercards as lead mod",
+                            s.showModActionsOnModUsercardsAsLeadMod)
+        ->setTooltip("When you are lead moderator, still show mod action "
+                     "buttons on other moderators' usercards.")
+        ->addTo(layout);
+
+    layout.addTitle("Nuke");
+    SettingWidget::checkbox("Enable nuke preview",
+                            s.nukePreviewEnabled)
+        ->setTooltip("While typing /nuke, highlight matching messages in chat "
+                     "as a preview.")
+        ->addTo(layout);
+    SettingWidget::checkbox("Show nuke summary", s.nukeShowSummary)
+        ->setTooltip("Show a summary message in chat when a nuke finishes.")
+        ->addTo(layout);
+    SettingWidget::checkbox("Skip VIPs in nuke", s.nukeSkipVips)
+        ->setTooltip("Do not target VIP users when running /nuke.")
+        ->addTo(layout);
+    SettingWidget::lineEdit("Nuke moderation reason",
+                            s.nukeModerationMessage,
+                            "Optional reason for timeout/ban")
+        ->setTooltip("Reason sent with timeout or ban actions from /nuke.")
+        ->addTo(layout);
+
+    layout.addTitle("Translation");
+    SettingWidget::lineEdit("Default translation target language",
+                            s.messageTranslationTargetLanguage, "e.g. en, fr, ja")
+        ->setTooltip(
+            "Language code used by /translate. Use /translateto <lang> "
+            "<text> to override per message.")
+        ->addTo(layout);
+
     layout.addTitle("Moderation");
     SettingWidget::checkbox("Show repeated-message counters",
                             s.enableRepeatedMessageDetector)

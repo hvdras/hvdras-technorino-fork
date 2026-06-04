@@ -107,6 +107,8 @@ set(SOURCE_FILES
         controllers/commands/builtin/twitch/GetVIPs.hpp
         controllers/commands/builtin/twitch/LowTrust.cpp
         controllers/commands/builtin/twitch/LowTrust.hpp
+        controllers/commands/builtin/twitch/Nuke.cpp
+        controllers/commands/builtin/twitch/Nuke.hpp
         controllers/commands/builtin/twitch/Pin.cpp
         controllers/commands/builtin/twitch/Pin.hpp
         controllers/commands/builtin/twitch/Poll.cpp
@@ -430,6 +432,8 @@ set(SOURCE_FILES
         providers/kick/KickBadges.cpp
         providers/repetitions/RepeatedMessageDetector.cpp
         providers/repetitions/RepeatedMessageDetector.hpp
+        providers/translation/Translator.cpp
+        providers/translation/Translator.hpp
         providers/kick/KickBadges.hpp
         providers/kick/KickChannel.cpp
         providers/kick/KickChannel.hpp

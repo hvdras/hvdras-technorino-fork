@@ -837,6 +837,22 @@ public:
     IntSetting hideSimilarMaxMessagesToCheck = {
         "/similarity/hideSimilarMaxMessagesToCheck", 3};
 
+    // -- Nuke --
+    BoolSetting nukePreviewEnabled{"/moltorino/moderation/nuke/previewEnabled", true};
+    BoolSetting nukeShowSummary{"/moltorino/moderation/nuke/showSummary", true};
+    BoolSetting nukeSkipVips{"/moltorino/moderation/nuke/skipVips", false};
+    QStringSetting nukeModerationMessage{"/moltorino/moderation/nuke/moderationMessage", ""};
+
+    // -- Translation --
+    QStringSetting messageTranslationTargetLanguage{"/moltorino/translation/targetLanguage", "en"};
+
+    // -- Miscellaneous --
+    BoolSetting colorTabHighlightsByMessage{"/misc/colorTabHighlightsByMessage", true};
+    BoolSetting hideModActionsOnModUsercards{"/misc/hideModActionsOnModUsercards", true};
+    BoolSetting showModActionsOnModUsercardsAsLeadMod{"/usercard/showModActionsOnModUsercardsAsLeadMod", false};
+    BoolSetting showFollowButtonInSplitHeader{"/moltorino/showFollowButtonInSplitHeader", true};
+    BoolSetting confirmUnfollowFromSplitHeader{"/moltorino/confirmUnfollowFromSplitHeader", true};
+
     // -- Repeated Message Detector --
     BoolSetting enableRepeatedMessageDetector{"/moltorino/moderation/repeatedMessages/enabled", true};
     BoolSetting repeatedMessagesShowOnlyModerationMode{"/moltorino/moderation/repeatedMessages/showOnlyModerationMode", true};

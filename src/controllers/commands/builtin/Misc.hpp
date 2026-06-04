@@ -35,4 +35,8 @@ QString unstableSetUserClientSideColor(const CommandContext &ctx);
 QString openUsercard(const CommandContext &ctx);
 QString openLogs(const CommandContext &ctx);
 
+QString translate(const CommandContext &ctx);
+QString translateTo(const CommandContext &ctx);
+QString sayTranslate(const CommandContext &ctx);
+
 }  // namespace chatterino::commands

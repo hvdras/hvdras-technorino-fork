@@ -21,6 +21,7 @@
 #include "controllers/commands/builtin/twitch/GetModerators.hpp"
 #include "controllers/commands/builtin/twitch/GetVIPs.hpp"
 #include "controllers/commands/builtin/twitch/LowTrust.hpp"
+#include "controllers/commands/builtin/twitch/Nuke.hpp"
 #include "controllers/commands/builtin/twitch/Pin.hpp"
 #include "controllers/commands/builtin/twitch/Poll.hpp"
 #include "controllers/commands/builtin/twitch/Prediction.hpp"
@@ -397,6 +398,11 @@ CommandController::CommandController(const Paths &paths)
 
     this->registerCommand("/openurl", &commands::openURL);
 
+    this->registerCommand("/translate", &commands::translate);
+    this->registerCommand("/translateto", &commands::translateTo);
+    this->registerCommand("/saytranslate", &commands::sayTranslate);
+    this->registerCommand("/tl", &commands::sayTranslate);
+
     this->registerCommand("/raw", &commands::sendRawMessage);
 
     this->registerCommand("/reply", &commands::sendReply);
@@ -566,6 +572,8 @@ CommandController::CommandController(const Paths &paths)
     this->registerCommand("/shieldoff", &commands::shieldModeOff);
 
     this->registerCommand("/shoutout", &commands::sendShoutout);
+
+    this->registerCommand("/nuke", &commands::sendNuke);
 
     this->registerCommand("/poll", &commands::createPoll);
     this->registerCommand("/cancelpoll", &commands::cancelPoll);
