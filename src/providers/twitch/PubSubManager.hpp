@@ -49,11 +49,6 @@ public:
         Signal<const QJsonObject &> redeemed;
     } pointReward;
 
-    struct {
-        // channelID, data
-        Signal<QString, const QJsonObject &> updated;
-    } pinnedChat;
-
     /**
      * Listen to incoming channel point redemptions in the given channel.
      * This topic is relevant for everyone.
@@ -61,13 +56,6 @@ public:
      * PubSub topic: community-points-channel-v1.{channelID}
      */
     void listenToChannelPointRewards(const QString &channelID);
-
-    /**
-     * Listen to pinned chat updates in the given channel.
-     *
-     * PubSub topic: pinned-chat-updates-v1.{channelID}
-     */
-    void listenToPinnedChatUpdates(const QString &channelID);
 
     void reconnect();
 

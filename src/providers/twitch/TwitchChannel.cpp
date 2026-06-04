@@ -767,6 +767,7 @@ void TwitchChannel::roomIdChanged()
         return;
     }
     this->refreshPubSub();
+    this->refreshPinnedMessage();
     this->refreshBadges();
     this->refreshCheerEmotes();
     this->refreshTwitchChannelEmotes(false);
@@ -1591,7 +1592,6 @@ void TwitchChannel::refreshPubSub()
     auto currentAccount = getApp()->getAccounts()->twitch.getCurrent();
 
     getApp()->getTwitchPubSub()->listenToChannelPointRewards(roomId);
-    getApp()->getTwitchPubSub()->listenToPinnedChatUpdates(roomId);
 
     if (currentAccount->isAnon())
     {
@@ -2580,7 +2580,53 @@ void TwitchChannel::refreshPinnedMessage()
     {
         return;
     }
-    // No GQL refresh available; pin state is driven entirely by PubSub events.
+
+    auto account = getApp()->getAccounts()->twitch.getCurrent();
+    if (!account || account->isAnon())
+    {
+        return;
+    }
+
+    const auto weak = this->weak_from_this();
+    getHelix()->getPinnedChatMessage(
+        this->roomId(), account->getUserId(),
+        [weak](const std::optional<HelixPinnedChatMessage> &result) {
+            auto shared =
+                std::dynamic_pointer_cast<TwitchChannel>(weak.lock());
+            if (!shared)
+            {
+                return;
+            }
+
+            if (!result)
+            {
+                shared->setPinnedMessage(std::nullopt);
+                return;
+            }
+
+            PinnedMessage pin;
+            pin.messageId = result->messageID;
+            pin.text = result->messageText;
+            pin.authorId = result->sender.id;
+            pin.authorLogin = result->sender.login;
+            pin.authorName = result->sender.displayName;
+            pin.pinnerLogin = result->pinnedBy.login;
+            pin.pinnerName = result->pinnedBy.displayName;
+            pin.pinnedAt = result->startsAt;
+            pin.endsAt = result->endsAt;
+            shared->setPinnedMessage(std::move(pin));
+        },
+        [weak](const QString &error) {
+            auto shared =
+                std::dynamic_pointer_cast<TwitchChannel>(weak.lock());
+            if (!shared)
+            {
+                return;
+            }
+            qCDebug(chatterinoTwitch)
+                << "Failed to fetch pinned message for" << shared->getName()
+                << ":" << error;
+        });
 }
 
 void TwitchChannel::handlePinnedChatUpdate(const QJsonObject &data)
