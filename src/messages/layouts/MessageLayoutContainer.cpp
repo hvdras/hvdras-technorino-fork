@@ -551,6 +551,21 @@ qreal MessageLayoutContainer::getHeight() const
     return this->height_;
 }
 
+int MessageLayoutContainer::getFirstLineHeight() const
+{
+    if (this->lines_.empty())
+    {
+        return 0;
+    }
+    if (this->lines_.size() == 1)
+    {
+        return static_cast<int>(this->getHeight());
+    }
+    return static_cast<int>(
+        std::ceil(this->lines_[0].rect.bottom() +
+                  (MARGIN.bottom() * this->scale_)));
+}
+
 float MessageLayoutContainer::getScale() const
 {
     return this->scale_;

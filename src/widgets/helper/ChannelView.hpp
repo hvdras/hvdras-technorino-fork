@@ -204,6 +204,18 @@ public:
     void queueLayout();
     void invalidateBuffers();
 
+    // --- Banner/overlay rendering helpers (used by PinnedMessageBanner) ---
+    void setCollapseMessages(bool value);
+    void setOverrideSeparateMessages(std::optional<bool> value);
+    void setTransparentBackground(bool transparent);
+    void setOverrideEmoteScale(std::optional<float> value);
+    std::optional<float> getOverrideEmoteScale() const;
+    void setOverrideBadgeScale(std::optional<float> value);
+    std::optional<float> getOverrideBadgeScale() const;
+    void setCenterBadges(bool value);
+    void performLayout(bool causedByScrollbar = false,
+                       bool causedByShow = false);
+
     void clearMessages();
 
     Context getContext() const;
@@ -302,8 +314,6 @@ private:
                          const MessagePtr &replacement);
     void messagesUpdated();
 
-    void performLayout(bool causedByScrollbar = false,
-                       bool causedByShow = false);
     void layoutVisibleMessages(const std::vector<MessageLayoutPtr> &messages);
     void updateScrollbar(const std::vector<MessageLayoutPtr> &messages,
                          bool causedByScrollbar, bool causedByShow);
@@ -371,6 +381,12 @@ private:
     uint32_t pauseSelectionOffset_ = 0;
 
     std::optional<MessageElementFlags> overrideFlags_;
+    bool collapseMessages_{false};
+    bool transparentBackground_{false};
+    bool centerBadges_{false};
+    std::optional<float> overrideEmoteScale_;
+    std::optional<float> overrideBadgeScale_;
+    std::optional<bool> overrideSeparateMessages_;
     MessageLayoutPtr lastReadMessage_;
 
     ThreadGuard snapshotGuard_;

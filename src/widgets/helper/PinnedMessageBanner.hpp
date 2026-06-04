@@ -5,8 +5,7 @@
 
 #include <QHBoxLayout>
 #include <QLabel>
-#include <pajlada/signals/scoped-connection.hpp>
-#include <vector>
+#include <pajlada/signals/signalholder.hpp>
 
 #include "widgets/buttons/SvgButton.hpp"
 #include "common/Channel.hpp"
@@ -79,7 +78,7 @@ private:
     TwitchChannel *twitchChannel_{};
     QTimer *countdownTimer_{};
 
-    std::vector<pajlada::Signals::ScopedConnection> managedConnections_;
+    pajlada::Signals::SignalHolder managedConnections_;
 };
 
 }

@@ -3739,4 +3739,56 @@ ChannelView::ChannelViewID ChannelView::getID() const
     return this->id_;
 }
 
+// --- Banner/overlay rendering helpers ---
+
+void ChannelView::setCollapseMessages(bool value)
+{
+    if (this->collapseMessages_ == value)
+    {
+        return;
+    }
+    this->collapseMessages_ = value;
+    this->invalidateBuffers();
+}
+
+void ChannelView::setOverrideSeparateMessages(std::optional<bool> value)
+{
+    this->overrideSeparateMessages_ = value;
+    this->queueUpdate();
+}
+
+void ChannelView::setTransparentBackground(bool transparent)
+{
+    this->transparentBackground_ = transparent;
+    this->update();
+}
+
+void ChannelView::setOverrideEmoteScale(std::optional<float> value)
+{
+    this->overrideEmoteScale_ = value;
+    this->queueLayout();
+}
+
+std::optional<float> ChannelView::getOverrideEmoteScale() const
+{
+    return this->overrideEmoteScale_;
+}
+
+void ChannelView::setOverrideBadgeScale(std::optional<float> value)
+{
+    this->overrideBadgeScale_ = value;
+    this->queueLayout();
+}
+
+std::optional<float> ChannelView::getOverrideBadgeScale() const
+{
+    return this->overrideBadgeScale_;
+}
+
+void ChannelView::setCenterBadges(bool value)
+{
+    this->centerBadges_ = value;
+    this->queueLayout();
+}
+
 }  // namespace chatterino

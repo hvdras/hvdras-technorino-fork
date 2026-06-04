@@ -151,6 +151,7 @@ struct MessageLayoutContainer {
      * Returns the height of this message
      */
     qreal getHeight() const;
+    int getFirstLineHeight() const;
 
     /**
      * Returns the scale of this message

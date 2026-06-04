@@ -77,6 +77,11 @@ int MessageLayout::getWidth() const
     return static_cast<int>(this->container_.getWidth());
 }
 
+int MessageLayout::getFirstLineHeight() const
+{
+    return this->container_.getFirstLineHeight();
+}
+
 // Layout
 // return true if redraw is required
 bool MessageLayout::layout(const MessageLayoutContext &ctx,

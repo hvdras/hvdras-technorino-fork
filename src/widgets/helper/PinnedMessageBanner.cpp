@@ -184,14 +184,12 @@ PinnedMessageBanner::PinnedMessageBanner(Split *split, QWidget *parent)
 {
     this->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
 
-    this->managedConnections_.emplace_back(
-        split->focused.connect([this]() {
-            this->update();
-        }));
-    this->managedConnections_.emplace_back(
-        split->focusLost.connect([this]() {
-            this->update();
-        }));
+    this->managedConnections_.managedConnect(split->focused, [this]() {
+        this->update();
+    });
+    this->managedConnections_.managedConnect(split->focusLost, [this]() {
+        this->update();
+    });
 
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, BASE_TOP_MARGIN, BASE_RIGHT_MARGIN, BASE_BOTTOM_MARGIN);
@@ -283,14 +281,14 @@ PinnedMessageBanner::PinnedMessageBanner(Split *split, QWidget *parent)
         this->messageView_->setTransparentBackground(true);
     });
 
-    this->managedConnections_.emplace_back(
-        this->messageView_->mouseDown.connect([this](QMouseEvent *event) {
+    this->managedConnections_.managedConnect(
+        this->messageView_->mouseDown, [this](QMouseEvent *event) {
             if (event->button() == Qt::LeftButton &&
                 !shouldLetEmbeddedMessageHandleClick(this->messageView_, event))
             {
                 this->toggleExpansion();
             }
-        }));
+        });
     this->messageView_->setOverrideFlags(pinnedMessageFlags());
     this->signalHolder_.managedConnect(
         getApp()->getWindows()->wordFlagsChanged, [this]() {
