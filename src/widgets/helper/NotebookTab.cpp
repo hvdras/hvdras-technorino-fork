@@ -776,9 +776,6 @@ void NotebookTab::updateHighlightState(HighlightState state,
                                        std::shared_ptr<QColor> color,
                                        const ChannelView &channelViewSource)
 {
-    const TabHighlight highlight{state, std::move(color)};
-    const auto newHighlightStyle = highlight.state;
-
     if (this->isSelected())
     {
         assert(this->highlightSources_.empty());
@@ -791,8 +788,7 @@ void NotebookTab::updateHighlightState(HighlightState state,
         return;
     }
 
-    if (!this->highlightEnabled_ &&
-        newHighlightStyle == HighlightState::NewMessage)
+    if (!this->highlightEnabled_ && state == HighlightState::NewMessage)
     {
         return;
     }
@@ -802,12 +798,12 @@ void NotebookTab::updateHighlightState(HighlightState state,
     static std::size_t globalSequence = 0;
     const auto seq = ++globalSequence;
 
-    switch (newHighlightStyle)
+    switch (state)
     {
         case HighlightState::Highlighted: {
             HighlightSource src;
-            src.state = newHighlightStyle;
-            src.color = highlight.color;
+            src.state = state;
+            src.color = color;
             src.sequence = seq;
             this->highlightSources_.insert_or_assign(channelViewId,
                                                      std::move(src));
@@ -817,7 +813,7 @@ void NotebookTab::updateHighlightState(HighlightState state,
             if (!this->highlightSources_.contains(channelViewId))
             {
                 HighlightSource src;
-                src.state = newHighlightStyle;
+                src.state = state;
                 src.sequence = seq;
                 this->highlightSources_.emplace(channelViewId, std::move(src));
             }
@@ -827,22 +823,22 @@ void NotebookTab::updateHighlightState(HighlightState state,
             break;
     }
 
-    if (this->highlightState_ == newHighlightStyle ||
+    if (this->highlightState_ == state ||
         this->highlightState_ == HighlightState::Highlighted)
     {
-        if (newHighlightStyle == HighlightState::Highlighted &&
-            highlight.color && !colorsMatch(this->highlightColor_, highlight.color))
+        if (state == HighlightState::Highlighted && color &&
+            !colorsMatch(this->highlightColor_, color))
         {
-            this->highlightColor_ = highlight.color;
+            this->highlightColor_ = color;
             this->update();
         }
         return;
     }
 
-    this->highlightState_ = newHighlightStyle;
-    if (newHighlightStyle == HighlightState::Highlighted)
+    this->highlightState_ = state;
+    if (state == HighlightState::Highlighted)
     {
-        this->highlightColor_ = highlight.color;
+        this->highlightColor_ = std::move(color);
     }
     else
     {
