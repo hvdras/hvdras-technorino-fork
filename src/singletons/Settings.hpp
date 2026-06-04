@@ -850,8 +850,6 @@ public:
     BoolSetting colorTabHighlightsByMessage{"/misc/colorTabHighlightsByMessage", true};
     BoolSetting hideModActionsOnModUsercards{"/misc/hideModActionsOnModUsercards", true};
     BoolSetting showModActionsOnModUsercardsAsLeadMod{"/usercard/showModActionsOnModUsercardsAsLeadMod", false};
-    BoolSetting showFollowButtonInSplitHeader{"/moltorino/showFollowButtonInSplitHeader", true};
-    BoolSetting confirmUnfollowFromSplitHeader{"/moltorino/confirmUnfollowFromSplitHeader", true};
 
     // -- Repeated Message Detector --
     BoolSetting enableRepeatedMessageDetector{"/moltorino/moderation/repeatedMessages/enabled", true};

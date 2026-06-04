@@ -16,6 +16,7 @@
 #include "controllers/hotkeys/HotkeyController.hpp"
 #include "controllers/userdata/UserDataController.hpp"
 #include "messages/Message.hpp"
+#include "providers/twitch/TwitchBadge.hpp"
 #include "messages/MessageBuilder.hpp"
 #include "providers/IvrApi.hpp"
 #include "providers/kick/KickAccount.hpp"
@@ -633,7 +634,22 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
                         ->getUserName()
                         .compare(this->userName_, Qt::CaseInsensitive) == 0;
                 bool hasModRights = twitchChannel->hasModRights();
-                visible = hasModRights && !isMyself;
+                if (hasModRights && !isMyself)
+                {
+                    if (twitchChannel->isBroadcaster() ||
+                        !getSettings()->hideModActionsOnModUsercards)
+                    {
+                        visible = true;
+                    }
+                    else if (!this->isMod_ && !this->isBroadcaster_)
+                    {
+                        visible = true;
+                    }
+                    else if (getSettings()->showModActionsOnModUsercardsAsLeadMod)
+                    {
+                        visible = true;
+                    }
+                }
             }
             else if (auto *kickChannel = dynamic_cast<KickChannel *>(
                          this->underlyingChannel_.get()))
@@ -924,6 +940,7 @@ void UserInfoPopup::installEvents()
                      [this]() {
                          this->updateNotes();
                      });
+
 }
 
 void UserInfoPopup::setData(const QString &name, const ChannelPtr &channel)
@@ -978,6 +995,45 @@ void UserInfoPopup::setData(const QString &name,
     else
     {
         this->updateUserData();
+    }
+
+    // Scan existing channel messages to detect moderator/broadcaster badge
+    // on the target user so hideModActionsOnModUsercards works immediately.
+    this->isMod_ = false;
+    this->isBroadcaster_ = false;
+    if (this->underlyingChannel_)
+    {
+        const auto snapshot = this->underlyingChannel_->getMessageSnapshot();
+        for (const auto &message : snapshot)
+        {
+            if (message == nullptr ||
+                message->loginName.compare(this->userName_,
+                                           Qt::CaseInsensitive) != 0)
+            {
+                continue;
+            }
+            for (const auto &badge : message->twitchBadges)
+            {
+                if (!this->isMod_ &&
+                    (badge.key_.compare(u"moderator"_s,
+                                        Qt::CaseInsensitive) == 0 ||
+                     badge.key_.compare(u"lead_moderator"_s,
+                                        Qt::CaseInsensitive) == 0))
+                {
+                    this->isMod_ = true;
+                }
+                if (!this->isBroadcaster_ &&
+                    badge.key_.compare(u"broadcaster"_s,
+                                       Qt::CaseInsensitive) == 0)
+                {
+                    this->isBroadcaster_ = true;
+                }
+            }
+            if (this->isMod_ && this->isBroadcaster_)
+            {
+                break;
+            }
+        }
     }
 
     this->userStateChanged_.invoke();

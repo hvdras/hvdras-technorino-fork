@@ -165,15 +165,6 @@ void TechnorinoPage::initLayout(GeneralPageView &layout)
         ->setTooltip("When a message highlights a tab, use the message's "
                      "highlight color for the tab indicator line.")
         ->addTo(layout);
-    SettingWidget::checkbox("Show follow button in chat header",
-                            s.showFollowButtonInSplitHeader)
-        ->setTooltip("Show a follow button in the split header.")
-        ->addTo(layout);
-    SettingWidget::checkbox("Confirm before unfollowing from chat header",
-                            s.confirmUnfollowFromSplitHeader)
-        ->setTooltip("Ask for confirmation before unfollowing from the split "
-                     "header button.")
-        ->addTo(layout);
     SettingWidget::checkbox("Hide mod actions on moderator usercards",
                             s.hideModActionsOnModUsercards)
         ->setTooltip(
