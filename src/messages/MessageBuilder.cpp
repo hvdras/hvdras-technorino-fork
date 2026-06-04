@@ -587,6 +587,12 @@ EmotePtr parseEmote(TwitchChannel *twitchChannel, const QString &userID,
     return {};
 }
 
+}  // namespace
+
+namespace chatterino {
+
+namespace {
+
 bool hasBadge(const QString &badges, const QString &badgeName)
 {
     const auto prefix = badgeName % u"/"_s;
@@ -600,14 +606,11 @@ bool hasBadge(const QString &badges, const QString &badgeName)
     return false;
 }
 
-void appendRepeatedMessageCounter(chatterino::MessageBuilder &builder,
-                                  chatterino::Channel *channel,
+void appendRepeatedMessageCounter(MessageBuilder &builder, Channel *channel,
                                   const QVariantMap &tags,
                                   const QString &content,
                                   bool senderIsBroadcaster)
 {
-    using namespace chatterino;
-
     auto *detector = getApp()->getRepeatedMessageDetector();
     if (detector == nullptr)
     {
@@ -651,8 +654,6 @@ void appendRepeatedMessageCounter(chatterino::MessageBuilder &builder,
 }
 
 }  // namespace
-
-namespace chatterino {
 
 MessagePtr makeSystemMessage(const QString &text)
 {
