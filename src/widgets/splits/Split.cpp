@@ -957,6 +957,13 @@ void Split::setChannel(IndirectChannel newChannel)
 
     this->pinnedBanner_->setPinnedMessage(std::nullopt, nullptr);
 
+    if (this->pinnedRefreshTimer_)
+    {
+        this->pinnedRefreshTimer_->stop();
+        this->pinnedRefreshTimer_->deleteLater();
+        this->pinnedRefreshTimer_ = nullptr;
+    }
+
     TwitchChannel *tc = dynamic_cast<TwitchChannel *>(newChannel.get().get());
     auto *kc = dynamic_cast<KickChannel *>(newChannel.get().get());
     auto *mc = dynamic_cast<MultiChannel *>(newChannel.get().get());
@@ -1025,6 +1032,16 @@ void Split::setChannel(IndirectChannel newChannel)
             // Always kick off a fresh Helix fetch so the banner populates
             // even if the channel was initialized before this Split connected.
             tc->refreshPinnedMessage();
+
+            // Poll every 30s so pins/unpins are reflected while watching.
+            this->pinnedRefreshTimer_ = new QTimer(this);
+            this->pinnedRefreshTimer_->setInterval(30000);
+            this->pinnedRefreshTimer_->setTimerType(Qt::VeryCoarseTimer);
+            QObject::connect(this->pinnedRefreshTimer_, &QTimer::timeout,
+                             [tc] {
+                                 tc->refreshPinnedMessage();
+                             });
+            this->pinnedRefreshTimer_->start();
         }
         else
         {

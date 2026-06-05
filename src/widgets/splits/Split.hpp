@@ -166,6 +166,7 @@ private:
     QVBoxLayout *const vbox_;
     SplitHeader *const header_;
     PinnedMessageBanner *const pinnedBanner_;
+    QTimer *pinnedRefreshTimer_{};
     ChannelView *const view_;
     SplitInput *const input_;
     SplitOverlay *const overlay_;
