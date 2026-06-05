@@ -3791,7 +3791,7 @@ void ChannelView::translateMessage(const MessagePtr &message)
             auto translated = message->clone();
             translated->messageText = translatedText;
             translated->searchText =
-                message->searchText + u" "_s + translatedText;
+                message->searchText + QStringLiteral(" ") + translatedText;
             translated->translatedFrom = message;
 
             // Keep structural elements (timestamp, badges, username, mod
@@ -3826,7 +3826,8 @@ void ChannelView::translateMessage(const MessagePtr &message)
             if (getSettings()->showTranslatedMessageIndicator)
             {
                 newElements.emplace_back(new TextElement(
-                    u"(translated)"_s, MessageElementFlag::Text,
+                    QStringLiteral("(translated)"),
+                    MessageElementFlag::Text,
                     MessageColor(QColor(0x72, 0x72, 0x72)),
                     FontStyle::ChatMediumItalic));
             }
