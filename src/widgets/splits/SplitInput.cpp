@@ -230,13 +230,6 @@ void SplitInput::initLayout()
         },
         this->managedConnections_);
 
-    getSettings()->hideEmojiButton.connect(
-        [this](const bool, auto) { this->updateEmoteButton(); },
-        this->managedConnections_);
-
-    getSettings()->showCommandSuggestions.connect(
-        [this](const bool, auto) { this->updateCommandSuggestions(); },
-        this->managedConnections_);
 
     // right box
     auto box = hboxLayout.emplace<QVBoxLayout>().withoutMargin();
@@ -281,6 +274,15 @@ void SplitInput::initLayout()
     QObject::connect(this->ui_.emoteButton, &Button::leftClicked, [this] {
         this->openEmotePopup();
     });
+
+    // These must come AFTER emoteButton is created — pajlada calls the
+    // callback immediately on connect, so emoteButton must already exist.
+    getSettings()->hideEmojiButton.connect(
+        [this](const bool, auto) { this->updateEmoteButton(); },
+        this->managedConnections_);
+    getSettings()->showCommandSuggestions.connect(
+        [this](const bool, auto) { this->updateCommandSuggestions(); },
+        this->managedConnections_);
 
     // clear input and remove reply thread
     QObject::connect(this->ui_.cancelReplyButton, &Button::leftClicked, [this] {
