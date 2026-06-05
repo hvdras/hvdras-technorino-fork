@@ -196,14 +196,65 @@ void TechnorinoPage::initLayout(GeneralPageView &layout)
         ->addTo(layout);
 
     layout.addTitle("Pinned Messages");
-    SettingWidget::checkbox("Show pinned message banner",
+    layout.addDescription("Pinned message banner and pin action options.");
+    SettingWidget::checkbox("Move Pin actions to Moderate menu",
+                            s.movePinToModerateMenu)
+        ->setTooltip("Put Pin and Unpin inside the Moderate submenu when "
+                     "right-clicking a message.")
+        ->addTo(layout);
+    layout.addDropdown<int>(
+        "Show pin button on mods and broadcaster",
+        {"Never", "In moderation mode", "Always"},
+        s.showPinButtonOnModeratorsMode,
+        [](int val) {
+            switch (val)
+            {
+                case 0: return QString("Never");
+                case 2: return QString("Always");
+                default: return QString("In moderation mode");
+            }
+        },
+        [](DropdownArgs args) {
+            if (args.value == "Never") return 0;
+            if (args.value == "Always") return 2;
+            return 1;
+        },
+        false)
+        ->setToolTip("When to show the inline Pin button beside messages.");
+    SettingWidget::checkbox("Show pinned messages",
                             s.enablePinnedMessages)
-        ->setTooltip("Show a banner above chat when a message is pinned.")
+        ->setTooltip("Show the pinned message banner above chat.")
         ->addTo(layout);
     SettingWidget::checkbox("Always expand long pinned messages",
                             s.alwaysExpandPinnedMessages)
         ->setTooltip("Automatically expand the full content of long pins.")
         ->addTo(layout);
+    SettingWidget::checkbox("Enable /pin <message text>",
+                            s.enablePinCommandMessages)
+        ->setTooltip("Let /pin followed by text send that message and pin it.")
+        ->addTo(layout);
+    SettingWidget::checkbox("Enable /pin <username>",
+                            s.enablePinUserCommand)
+        ->setTooltip("Let /pin followed by a username pin that user's latest message.")
+        ->addTo(layout);
+    SettingWidget::checkbox("Require @ for /pin <username>",
+                            s.requireAtForPinUserCommand)
+        ->setTooltip("Only /pin @username treats the argument as a username.")
+        ->addTo(layout);
+    layout.addDropdown<int>(
+        "Default pin duration",
+        {"Indefinite", "5 minutes", "10 minutes", "20 minutes", "30 minutes"},
+        s.defaultPinDuration,
+        [](int val) {
+            if (val <= 0) return QString("Indefinite");
+            return QString::number(val / 60) + " minutes";
+        },
+        [](DropdownArgs args) {
+            if (args.value == "Indefinite") return -1;
+            return args.value.split(' ')[0].toInt() * 60;
+        },
+        false)
+        ->setToolTip("How long pins last when no duration is specified.");
     SettingWidget::checkbox("Show unpin notifications in chat",
                             s.showUnpinNotifications)
         ->setTooltip("Show a system message when someone unpins a message.")
@@ -245,6 +296,89 @@ void TechnorinoPage::initLayout(GeneralPageView &layout)
         },
         false)
         ->setToolTip("How pin time is shown on the banner.");
+    layout.addDropdown<QString>(
+        "Pin timestamp format",
+        {"Relative", "h:mm", "hh:mm", "h:mm a", "hh:mm a"},
+        s.pinTimestampFormat,
+        [](QString val) { return val; },
+        [](DropdownArgs args) { return args.value; },
+        false)
+        ->setToolTip("How pin times are formatted on the banner.");
+
+    layout.addTitle("Poll and Prediction");
+    layout.addDescription("Poll, prediction, and banner behavior options.");
+    SettingWidget::checkbox("Show predictions",
+                            s.enablePredictions)
+        ->setTooltip("Show prediction banners above chat.")
+        ->addTo(layout);
+    SettingWidget::checkbox("Show polls",
+                            s.enablePolls)
+        ->setTooltip("Show poll banners above chat.")
+        ->addTo(layout);
+    SettingWidget::checkbox("Show prediction chat messages",
+                            s.showPredictionSystemMessages)
+        ->setTooltip("Show a chat message when predictions are created, "
+                     "locked, paid out, or refunded.")
+        ->addTo(layout);
+    SettingWidget::checkbox("Close prediction menu after betting",
+                            s.predictionAutoCloseDialog)
+        ->setTooltip("Close the prediction dialog after placing a bet.")
+        ->addTo(layout);
+    SettingWidget::checkbox("Close poll menu after voting",
+                            s.pollAutoCloseDialog)
+        ->setTooltip("Close the poll dialog after casting a vote.")
+        ->addTo(layout);
+    SettingWidget::checkbox("Close poll and prediction menus on focus loss",
+                            s.predictionCloseOnFocusLoss)
+        ->setTooltip("Close dialogs when you click away from them.")
+        ->addTo(layout);
+    layout.addDropdown<int>(
+        "Auto-dismiss resolved banners",
+        {"Never", "After 30 seconds", "After 1 minute", "After 5 minutes",
+         "After 10 minutes"},
+        s.predictionAutoDismissSeconds,
+        [](int val) {
+            if (val <= 0) return QString("Never");
+            if (val < 60) return QString("After %1 seconds").arg(val);
+            return QString("After %1 minute%2")
+                .arg(val / 60)
+                .arg(val / 60 == 1 ? "" : "s");
+        },
+        [](DropdownArgs args) {
+            if (args.value == "Never") return 0;
+            if (args.value.contains("30 seconds")) return 30;
+            if (args.value.contains("1 minute")) return 60;
+            if (args.value.contains("5 minute")) return 300;
+            if (args.value.contains("10 minute")) return 600;
+            return 300;
+        },
+        false)
+        ->setToolTip("Hide completed poll and prediction banners after a delay.");
+    layout.addDropdown<int>(
+        "Banner stacking behavior",
+        {"Show all", "Prefer pinned", "Prefer prediction", "Prefer poll",
+         "Intelligent"},
+        s.bannerStackMode,
+        [](int val) {
+            switch (val)
+            {
+                case 1: return QString("Prefer pinned");
+                case 2: return QString("Prefer prediction");
+                case 3: return QString("Intelligent");
+                case 4: return QString("Prefer poll");
+                default: return QString("Show all");
+            }
+        },
+        [](DropdownArgs args) {
+            if (args.value == "Prefer pinned") return 1;
+            if (args.value == "Prefer prediction") return 2;
+            if (args.value == "Prefer poll") return 4;
+            if (args.value == "Intelligent") return 3;
+            return 0;
+        },
+        false)
+        ->setToolTip("How pinned, poll, and prediction banners share space "
+                     "above chat when multiple are active.");
 
     layout.addTitle("Miscellaneous");
     SettingWidget::checkbox("Use message colors for tab alerts",

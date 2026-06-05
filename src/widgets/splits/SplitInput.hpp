@@ -52,6 +52,7 @@ public:
 
     void setReply(MessagePtr target, std::weak_ptr<Channel> channel);
     void setPlaceholderText(const QString &text);
+    void updatePollPredictButtons();
 
     /**
      * @brief Hide the widget
@@ -125,6 +126,8 @@ protected:
     void updateEmoteButton();
     void updateTranslateButton();
     void translateInput();
+    void openPollDialog();
+    void openPredictionDialog();
     void updateCommandSuggestions();
     void updateCompletionPopup();
     void showCompletionPopup(const QString &text, CompletionKind kind);
@@ -178,6 +181,8 @@ protected:
         LabelButton *sendButton;
         QLabel *sendWaitStatus;
         LabelButton *translateButton{};
+        LabelButton *pollButton{};
+        LabelButton *predictButton{};
         SvgButton *emoteButton;
     } ui_;
 

@@ -156,6 +156,7 @@ private:
      * moderation actions have been changed
      **/
     void refreshModerationMode();
+    void updateBannerVisibility();
 
     IndirectChannel channel_;
 

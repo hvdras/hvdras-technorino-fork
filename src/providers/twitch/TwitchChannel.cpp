@@ -768,8 +768,6 @@ void TwitchChannel::roomIdChanged()
     }
     this->refreshPubSub();
     this->refreshPinnedMessage();
-    this->refreshActivePrediction();
-    this->refreshActivePoll();
     this->refreshBadges();
     this->refreshCheerEmotes();
     this->refreshTwitchChannelEmotes(false);

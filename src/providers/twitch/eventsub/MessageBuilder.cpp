@@ -677,6 +677,8 @@ MessagePtr makeAutomodHoldMessageBody(
 {
     EventSubMessageBuilder builder(channel);
     builder->serverReceivedTime = time;
+    // Set id so nuke can extract the automod message ID for manageAutoModMessages
+    builder->id = u"automod_" % event.messageID.qt();
     builder->flags.set(MessageFlag::PubSub, MessageFlag::ModerationAction,
                        MessageFlag::AutoMod,
                        MessageFlag::AutoModOffendingMessage);

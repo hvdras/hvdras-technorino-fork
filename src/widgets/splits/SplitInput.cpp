@@ -17,7 +17,10 @@
 #include "providers/twitch/TwitchCommon.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
 #include "singletons/Fonts.hpp"
+#include "controllers/accounts/AccountController.hpp"
 #include "providers/translation/Translator.hpp"
+#include "providers/twitch/api/Helix.hpp"
+#include "providers/twitch/TwitchAccount.hpp"
 #include "singletons/Settings.hpp"
 #include "singletons/Theme.hpp"
 #include "singletons/WindowManager.hpp"
@@ -39,6 +42,16 @@
 #include "widgets/splits/SplitContainer.hpp"
 
 #include <QActionGroup>
+#include <QComboBox>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QFormLayout>
+#include <QLabel>
+#include <QLineEdit>
+#include <QMenu>
+#include <QMessageBox>
+#include <QSpinBox>
+#include <QVBoxLayout>
 #include <QCompleter>
 #include <QPainter>
 #include <QSignalBlocker>
@@ -253,6 +266,14 @@ void SplitInput::initLayout()
         this->ui_.translateButton->setVisible(false);
         box->addWidget(this->ui_.translateButton, 0, Qt::AlignRight);
 
+        this->ui_.pollButton = new LabelButton("Poll", nullptr);
+        this->ui_.pollButton->setVisible(false);
+        box->addWidget(this->ui_.pollButton, 0, Qt::AlignRight);
+
+        this->ui_.predictButton = new LabelButton("Predict", nullptr);
+        this->ui_.predictButton->setVisible(false);
+        box->addWidget(this->ui_.predictButton, 0, Qt::AlignRight);
+
         this->ui_.emoteButton = new SvgButton(
             {
                 .dark = ":/buttons/emote.svg",
@@ -287,6 +308,16 @@ void SplitInput::initLayout()
         this->translateInput();
     });
 
+    // poll button
+    QObject::connect(this->ui_.pollButton, &Button::leftClicked, [this] {
+        this->openPollDialog();
+    });
+
+    // prediction button
+    QObject::connect(this->ui_.predictButton, &Button::leftClicked, [this] {
+        this->openPredictionDialog();
+    });
+
     // These must come AFTER emoteButton is created — pajlada calls the
     // callback immediately on connect, so emoteButton must already exist.
     getSettings()->hideEmojiButton.connect(
@@ -298,6 +329,15 @@ void SplitInput::initLayout()
     getSettings()->showOutgoingTranslationButton.connect(
         [this](const bool, auto) { this->updateTranslateButton(); },
         this->managedConnections_);
+    getSettings()->enablePolls.connect(
+        [this](const bool, auto) { this->updatePollPredictButtons(); },
+        this->managedConnections_);
+    getSettings()->enablePredictions.connect(
+        [this](const bool, auto) { this->updatePollPredictButtons(); },
+        this->managedConnections_);
+    this->managedConnections_.managedConnect(
+        this->split_->channelChanged,
+        [this] { this->updatePollPredictButtons(); });
 
     // clear input and remove reply thread
     QObject::connect(this->ui_.cancelReplyButton, &Button::leftClicked, [this] {
@@ -1704,6 +1744,284 @@ void SplitInput::updateTranslateButton()
         this->ui_.translateButton->setVisible(
             getSettings()->showOutgoingTranslationButton);
     }
+}
+
+void SplitInput::updatePollPredictButtons()
+{
+    auto *tc = dynamic_cast<TwitchChannel *>(
+        this->split_->getChannel().get());
+
+    const bool hasMod = tc != nullptr && tc->hasModRights();
+
+    if (this->ui_.pollButton)
+    {
+        this->ui_.pollButton->setVisible(getSettings()->enablePolls && hasMod);
+        if (tc)
+        {
+            auto poll = tc->accessPoll();
+            this->ui_.pollButton->setText(
+                poll->has_value() ? "End Poll" : "Poll");
+        }
+    }
+
+    if (this->ui_.predictButton)
+    {
+        this->ui_.predictButton->setVisible(
+            getSettings()->enablePredictions && hasMod);
+        if (tc)
+        {
+            auto pred = tc->accessPrediction();
+            this->ui_.predictButton->setText(
+                pred->has_value() ? "Prediction ▾" : "Predict");
+        }
+    }
+}
+
+void SplitInput::openPollDialog()
+{
+    auto shared = std::dynamic_pointer_cast<TwitchChannel>(
+        this->split_->getChannel());
+    auto *tc = shared.get();
+    if (!tc)
+    {
+        return;
+    }
+    const auto weak = tc->weakFromThis();
+
+    // If a poll is active, offer to end it
+    {
+        auto poll = tc->accessPoll();
+        if (poll->has_value())
+        {
+            auto *menu = new QMenu(this);
+            menu->setAttribute(Qt::WA_DeleteOnClose);
+            menu->addAction("End poll (archive)", [weak] {
+                if (auto s = std::dynamic_pointer_cast<TwitchChannel>(
+                        weak.lock()))
+                {
+                    getHelix()->endPoll(
+                        s->roomId(), s->accessPoll()->value().id, true,
+                        [] {}, [](const QString &) {});
+                }
+            });
+            menu->addAction("End poll (show results)", [weak] {
+                if (auto s = std::dynamic_pointer_cast<TwitchChannel>(
+                        weak.lock()))
+                {
+                    getHelix()->endPoll(
+                        s->roomId(), s->accessPoll()->value().id, false,
+                        [] {}, [](const QString &) {});
+                }
+            });
+            menu->popup(QCursor::pos());
+            return;
+        }
+    }
+
+    // Create a new poll
+    auto *dlg = new QDialog(this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    dlg->setWindowTitle("Create Poll");
+    dlg->setMinimumWidth(380);
+
+    auto *form = new QFormLayout;
+
+    auto *titleEdit = new QLineEdit(dlg);
+    titleEdit->setPlaceholderText("Poll question");
+    form->addRow("Title:", titleEdit);
+
+    auto *durationSpin = new QSpinBox(dlg);
+    durationSpin->setRange(15, 1800);
+    durationSpin->setValue(60);
+    durationSpin->setSuffix(" seconds");
+    form->addRow("Duration:", durationSpin);
+
+    QVector<QLineEdit *> choiceEdits;
+    for (int i = 0; i < 5; ++i)
+    {
+        auto *edit = new QLineEdit(dlg);
+        edit->setPlaceholderText(i < 2 ? "Required" : "Optional");
+        form->addRow(QString("Choice %1:").arg(i + 1), edit);
+        choiceEdits.push_back(edit);
+    }
+
+    auto *buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dlg);
+
+    auto *vbox = new QVBoxLayout(dlg);
+    vbox->addLayout(form);
+    vbox->addWidget(buttons);
+
+    QObject::connect(buttons, &QDialogButtonBox::accepted, dlg,
+                     [dlg, weak, titleEdit, durationSpin, choiceEdits] {
+                         auto s = std::dynamic_pointer_cast<TwitchChannel>(
+                             weak.lock());
+                         if (!s)
+                         {
+                             dlg->reject();
+                             return;
+                         }
+                         const auto title = titleEdit->text().trimmed();
+                         if (title.isEmpty())
+                         {
+                             return;
+                         }
+                         QStringList choices;
+                         for (auto *e : choiceEdits)
+                         {
+                             const auto t = e->text().trimmed();
+                             if (!t.isEmpty())
+                             {
+                                 choices.append(t);
+                             }
+                         }
+                         if (choices.size() < 2)
+                         {
+                             QMessageBox::warning(
+                                 dlg, "Create Poll",
+                                 "At least 2 choices are required.");
+                             return;
+                         }
+                         getHelix()->createPoll(
+                             s->roomId(), title, choices,
+                             std::chrono::seconds(durationSpin->value()),
+                             0, [] {}, [dlg](const QString &err) {
+                                 QMessageBox::warning(
+                                     dlg, "Create Poll",
+                                     "Failed: " + err);
+                             });
+                         dlg->accept();
+                     });
+    QObject::connect(buttons, &QDialogButtonBox::rejected, dlg,
+                     &QDialog::reject);
+
+    dlg->show();
+}
+
+void SplitInput::openPredictionDialog()
+{
+    auto shared = std::dynamic_pointer_cast<TwitchChannel>(
+        this->split_->getChannel());
+    auto *tc = shared.get();
+    if (!tc)
+    {
+        return;
+    }
+    const auto weak = tc->weakFromThis();
+
+    // If a prediction is active, show management options
+    {
+        auto pred = tc->accessPrediction();
+        if (pred->has_value())
+        {
+            const auto predId = pred->value().id;
+            const auto outcomes = pred->value().outcomes;
+            auto *menu = new QMenu(this);
+            menu->setAttribute(Qt::WA_DeleteOnClose);
+            menu->addAction("Lock prediction", [weak, predId] {
+                if (auto s = std::dynamic_pointer_cast<TwitchChannel>(
+                        weak.lock()))
+                {
+                    getHelix()->endPrediction(
+                        s->roomId(), predId, false, {},
+                        [] {}, [](const QString &) {});
+                }
+            });
+            menu->addSeparator();
+            for (const auto &o : outcomes)
+            {
+                const auto oid = o.id;
+                const auto otitle = o.title;
+                menu->addAction("Resolve: " + otitle,
+                                [weak, predId, oid] {
+                                    if (auto s =
+                                            std::dynamic_pointer_cast<
+                                                TwitchChannel>(weak.lock()))
+                                    {
+                                        getHelix()->endPrediction(
+                                            s->roomId(), predId, false,
+                                            oid, [] {},
+                                            [](const QString &) {});
+                                    }
+                                });
+            }
+            menu->addSeparator();
+            menu->addAction("Cancel & refund", [weak, predId] {
+                if (auto s = std::dynamic_pointer_cast<TwitchChannel>(
+                        weak.lock()))
+                {
+                    getHelix()->endPrediction(
+                        s->roomId(), predId, true, {},
+                        [] {}, [](const QString &) {});
+                }
+            });
+            menu->popup(QCursor::pos());
+            return;
+        }
+    }
+
+    // Create a new prediction
+    auto *dlg = new QDialog(this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    dlg->setWindowTitle("Create Prediction");
+    dlg->setMinimumWidth(380);
+
+    auto *form = new QFormLayout;
+
+    auto *titleEdit = new QLineEdit(dlg);
+    titleEdit->setPlaceholderText("Prediction title");
+    form->addRow("Title:", titleEdit);
+
+    auto *durationSpin = new QSpinBox(dlg);
+    durationSpin->setRange(30, 1800);
+    durationSpin->setValue(300);
+    durationSpin->setSuffix(" seconds");
+    form->addRow("Duration:", durationSpin);
+
+    auto *outcome1Edit = new QLineEdit(dlg);
+    outcome1Edit->setText("Yes");
+    form->addRow("Outcome 1 (Blue):", outcome1Edit);
+
+    auto *outcome2Edit = new QLineEdit(dlg);
+    outcome2Edit->setText("No");
+    form->addRow("Outcome 2 (Pink):", outcome2Edit);
+
+    auto *buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dlg);
+
+    auto *vbox = new QVBoxLayout(dlg);
+    vbox->addLayout(form);
+    vbox->addWidget(buttons);
+
+    QObject::connect(
+        buttons, &QDialogButtonBox::accepted, dlg,
+        [dlg, weak, titleEdit, durationSpin, outcome1Edit, outcome2Edit] {
+            auto s = std::dynamic_pointer_cast<TwitchChannel>(weak.lock());
+            if (!s)
+            {
+                dlg->reject();
+                return;
+            }
+            const auto title = titleEdit->text().trimmed();
+            const auto o1 = outcome1Edit->text().trimmed();
+            const auto o2 = outcome2Edit->text().trimmed();
+            if (title.isEmpty() || o1.isEmpty() || o2.isEmpty())
+            {
+                return;
+            }
+            getHelix()->createPrediction(
+                s->roomId(), title, {o1, o2},
+                std::chrono::seconds(durationSpin->value()),
+                [] {}, [dlg](const QString &err) {
+                    QMessageBox::warning(dlg, "Create Prediction",
+                                         "Failed: " + err);
+                });
+            dlg->accept();
+        });
+    QObject::connect(buttons, &QDialogButtonBox::rejected, dlg,
+                     &QDialog::reject);
+
+    dlg->show();
 }
 
 void SplitInput::translateInput()

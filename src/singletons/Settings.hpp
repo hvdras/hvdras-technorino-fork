@@ -849,6 +849,22 @@ public:
     QStringSetting pinBannerBackgroundColor{"/moltorino/pinnedMessages/customBackgroundColor", ""};
     BoolSetting movePinToModerateMenu{"/moltorino/pinnedMessages/movePinToModerateMenu", false};
     IntSetting showPinButtonOnModeratorsMode{"/moltorino/pinnedMessages/showPinButtonOnModeratorsMode", 1};
+    BoolSetting enablePinCommandMessages{"/moltorino/pinnedMessages/enablePinCommandMessages", true};
+    BoolSetting enablePinUserCommand{"/moltorino/pinnedMessages/enablePinUserCommand", true};
+    BoolSetting requireAtForPinUserCommand{"/moltorino/pinnedMessages/requireAtForPinUserCommand", false};
+    IntSetting defaultPinDuration{"/moltorino/pinnedMessages/defaultDuration", -1};
+
+    // -- Poll and Prediction --
+    BoolSetting enablePredictions{"/moltorino/predictions/enabled", true};
+    BoolSetting enablePolls{"/moltorino/polls/enabled", true};
+    FloatSetting predictionBannerContentScale{"/moltorino/predictions/bannerContentScale", 1.f};
+    FloatSetting pollBannerContentScale{"/moltorino/polls/bannerContentScale", 1.f};
+    BoolSetting showPredictionSystemMessages{"/moltorino/predictions/showSystemMessages", true};
+    BoolSetting predictionAutoCloseDialog{"/moltorino/predictions/autoCloseDialog", true};
+    BoolSetting pollAutoCloseDialog{"/moltorino/polls/autoCloseDialog", false};
+    IntSetting predictionAutoDismissSeconds{"/moltorino/predictions/autoDismissSeconds", 300};
+    BoolSetting predictionCloseOnFocusLoss{"/moltorino/predictions/closeOnFocusLoss", false};
+    IntSetting bannerStackMode{"/moltorino/banners/stackMode", 3};
 
     // -- Nuke --
     BoolSetting nukePreviewEnabled{"/moltorino/moderation/nuke/previewEnabled", true};

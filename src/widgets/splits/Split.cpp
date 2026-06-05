@@ -898,6 +898,65 @@ void Split::refreshModerationMode()
     this->view_->queueLayout();
 }
 
+void Split::updateBannerVisibility()
+{
+    const bool hasPin = this->pinnedBanner_->hasPinnedMessage();
+    const bool hasPred = this->predictionBanner_->hasPrediction();
+    const bool hasPoll = this->pollBanner_->hasPoll();
+    const int mode = getSettings()->bannerStackMode;
+
+    // 0 = Show all, 1 = Prefer pinned, 2 = Prefer prediction,
+    // 3 = Intelligent, 4 = Prefer poll
+    const int activeCount = int(hasPin) + int(hasPred) + int(hasPoll);
+
+    if (activeCount <= 1 || mode == 0)
+    {
+        // Show all active banners
+        this->pinnedBanner_->setVisible(hasPin);
+        this->predictionBanner_->setVisible(hasPred);
+        this->pollBanner_->setVisible(hasPoll);
+        return;
+    }
+
+    // Multiple active — apply preference
+    bool showPin = hasPin;
+    bool showPred = hasPred;
+    bool showPoll = hasPoll;
+
+    if (mode == 1 && hasPin)
+    {
+        showPred = false;
+        showPoll = false;
+    }
+    else if (mode == 2 && hasPred)
+    {
+        showPin = false;
+        showPoll = false;
+    }
+    else if (mode == 4 && hasPoll)
+    {
+        showPin = false;
+        showPred = false;
+    }
+    else if (mode == 3)
+    {
+        // Intelligent: prediction > poll > pin (predictions are time-sensitive)
+        if (hasPred)
+        {
+            showPin = false;
+            showPoll = false;
+        }
+        else if (hasPoll)
+        {
+            showPin = false;
+        }
+    }
+
+    this->pinnedBanner_->setVisible(showPin);
+    this->predictionBanner_->setVisible(showPred);
+    this->pollBanner_->setVisible(showPoll);
+}
+
 void Split::openChannelInBrowserPlayer(ChannelPtr channel)
 {
     if (auto *twitchChannel = dynamic_cast<TwitchChannel *>(channel.get()))
@@ -1011,8 +1070,7 @@ void Split::setChannel(IndirectChannel newChannel)
             auto updatePin = [this, tc] {
                 this->pinnedBanner_->setPinnedMessage(
                     *tc->accessPinnedMessage(), tc);
-                this->pinnedBanner_->setVisible(
-                    this->pinnedBanner_->hasPinnedMessage());
+                this->updateBannerVisibility();
             };
 
             this->channelSignalHolder_.managedConnect(
@@ -1073,8 +1131,7 @@ void Split::setChannel(IndirectChannel newChannel)
                         [this, tc] {
                             this->pinnedBanner_->setPinnedMessage(
                                 *tc->accessPinnedMessage(), tc);
-                            this->pinnedBanner_->setVisible(
-                                this->pinnedBanner_->hasPinnedMessage());
+                            this->updateBannerVisibility();
                         });
                 }
                 else
@@ -1087,25 +1144,34 @@ void Split::setChannel(IndirectChannel newChannel)
 
         this->channelSignalHolder_.managedConnect(
             this->pinnedBanner_->dismissed, [this] {
-                this->pinnedBanner_->setVisible(false);
+                this->updateBannerVisibility();
             });
 
-        // Wire prediction and poll banners
+        // Wire prediction and poll banners + update SplitInput buttons
         this->channelSignalHolder_.managedConnect(
             tc->predictionChanged, [this, tc] {
                 this->predictionBanner_->setPrediction(
                     *tc->accessPrediction());
+                this->updateBannerVisibility();
+                this->getInput().updatePollPredictButtons();
             });
         this->channelSignalHolder_.managedConnect(
             tc->pollChanged, [this, tc] {
                 this->pollBanner_->setPoll(*tc->accessPoll());
+                this->updateBannerVisibility();
+                this->getInput().updatePollPredictButtons();
             });
 
         this->predictionBanner_->setPrediction(*tc->accessPrediction());
         this->pollBanner_->setPoll(*tc->accessPoll());
+        this->updateBannerVisibility();
 
         tc->refreshActivePrediction();
         tc->refreshActivePoll();
+
+        getSettings()->bannerStackMode.connect(
+            [this](const int &, auto) { this->updateBannerVisibility(); },
+            this->channelSignalHolder_);
 
         // Poll every 30s for prediction/poll updates
         this->predictionPollRefreshTimer_ = new QTimer(this);
