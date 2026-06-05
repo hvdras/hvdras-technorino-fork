@@ -5,9 +5,12 @@
 #include "controllers/commands/builtin/twitch/GetFounders.hpp"
 
 #include "controllers/commands/CommandContext.hpp"
-#include "messages/MessageBuilder.hpp"
 #include "providers/IvrApi.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
+
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QStringList>
 
 namespace {
 
@@ -33,7 +36,7 @@ QString targetChannelLogin(const CommandContext &ctx)
     return {};
 }
 
-}
+}  // namespace
 
 namespace chatterino::commands {
 
@@ -54,19 +57,39 @@ QString getFounders(const CommandContext &ctx)
 
     getIvr()->getFounders(
         channelLogin,
-        [channel{ctx.channel}](
-            const std::vector<HelixModerator> &founders) {
-            if (founders.empty())
+        [channel{ctx.channel}](const QJsonArray &founders) {
+            if (founders.isEmpty())
             {
                 channel->addSystemMessage(
                     "This channel does not have any founders.");
                 return;
             }
 
-            channel->addMessage(MessageBuilder::makeListOfUsersMessage(
-                                    "The founders of this channel are",
-                                    founders, channel.get()),
-                                MessageContext::Original);
+            QStringList names;
+            for (const auto &val : founders)
+            {
+                const auto obj = val.toObject();
+                auto name = obj.value("displayName").toString();
+                if (name.isEmpty())
+                {
+                    name = obj.value("login").toString();
+                }
+                if (!name.isEmpty())
+                {
+                    names.append(name);
+                }
+            }
+
+            if (names.isEmpty())
+            {
+                channel->addSystemMessage(
+                    "This channel does not have any founders.");
+                return;
+            }
+
+            channel->addSystemMessage(
+                QStringLiteral("The founders of this channel are: %1")
+                    .arg(names.join(QStringLiteral(", "))));
         },
         [channel{ctx.channel}] {
             channel->addSystemMessage("Could not get founders list!");
@@ -75,4 +98,4 @@ QString getFounders(const CommandContext &ctx)
     return "";
 }
 
-}
+}  // namespace chatterino::commands
