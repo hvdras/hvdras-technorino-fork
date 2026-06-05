@@ -1020,7 +1020,11 @@ void Split::setChannel(IndirectChannel newChannel)
                     }
                 });
 
+            // Read cached pin immediately (may be nullopt if not yet fetched)
             updatePin();
+            // Always kick off a fresh Helix fetch so the banner populates
+            // even if the channel was initialized before this Split connected.
+            tc->refreshPinnedMessage();
         }
         else
         {
@@ -1031,10 +1035,7 @@ void Split::setChannel(IndirectChannel newChannel)
             [this, tc](const bool &enabled, auto) {
                 if (enabled)
                 {
-                    this->pinnedBanner_->setPinnedMessage(
-                        *tc->accessPinnedMessage(), tc);
-                    this->pinnedBanner_->setVisible(
-                        this->pinnedBanner_->hasPinnedMessage());
+                    tc->refreshPinnedMessage();
                     this->channelSignalHolder_.managedConnect(
                         tc->pinnedMessageChanged,
                         [this, tc] {
