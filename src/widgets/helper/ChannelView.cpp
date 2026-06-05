@@ -19,6 +19,7 @@
 #include "messages/layouts/MessageLayoutElement.hpp"
 #include "messages/Message.hpp"
 #include "messages/MessageBuilder.hpp"
+#include "providers/translation/Translator.hpp"
 #include "messages/MessageElement.hpp"
 #include "messages/MessageThread.hpp"
 #include "providers/colors/ColorProvider.hpp"
@@ -2804,6 +2805,27 @@ void ChannelView::addMessageContextMenuItems(QMenu *menu,
         crossPlatformCopy(copyString);
     });
 
+    // Translate / Show original
+    {
+        const auto &msg = layout->getMessagePtr();
+        if (msg->translatedFrom != nullptr)
+        {
+            menu->addAction("Show &original", [this, msg] {
+                if (this->underlyingChannel_)
+                {
+                    this->underlyingChannel_->replaceMessage(
+                        msg, msg->translatedFrom);
+                }
+            });
+        }
+        else if (getSettings()->showTranslateMessageContextAction &&
+                 !msg->messageText.isEmpty())
+        {
+            menu->addAction("&Translate message",
+                            [this, msg] { this->translateMessage(msg); });
+        }
+    }
+
     // Only display reply option where it makes sense
     if (this->canReplyToMessages())
     {
@@ -3737,6 +3759,85 @@ void ChannelView::updateID()
 ChannelView::ChannelViewID ChannelView::getID() const
 {
     return this->id_;
+}
+
+// --- Inline message translation ---
+
+void ChannelView::translateMessage(const MessagePtr &message)
+{
+    if (message == nullptr || message->messageText.isEmpty())
+    {
+        return;
+    }
+
+    const auto targetLanguage = normalizedTranslationTargetLanguage(
+        getSettings()->messageTranslationTargetLanguage.getValue());
+    const auto channel = this->underlyingChannel_;
+    if (!channel)
+    {
+        return;
+    }
+
+    requestTextTranslation(
+        message->messageText, targetLanguage, this,
+        [channel, message](const TranslationResult &result) {
+            auto translatedText = result.translatedText.trimmed();
+            if (translatedText.isEmpty())
+            {
+                channel->addSystemMessage("Translation returned empty result.");
+                return;
+            }
+
+            auto translated = message->clone();
+            translated->messageText = translatedText;
+            translated->searchText =
+                message->searchText + u" "_s + translatedText;
+            translated->translatedFrom = message;
+
+            // Keep structural elements (timestamp, badges, username, mod
+            // tools), discard body text/emotes, then append translated text.
+            static const MessageElementFlags kStructural{
+                MessageElementFlag::Timestamp,
+                MessageElementFlag::ModeratorTools,
+                MessageElementFlag::Badges,
+                MessageElementFlag::BadgeSharedChannel,
+                MessageElementFlag::BadgeSevenTV,
+                MessageElementFlag::BadgeBttv,
+                MessageElementFlag::BadgeFfz,
+                MessageElementFlag::Username,
+                MessageElementFlag::AlwaysShow,
+                MessageElementFlag::RepliedMessage,
+                MessageElementFlag::ReplyButton,
+            };
+
+            std::vector<std::unique_ptr<MessageElement>> newElements;
+            for (const auto &el : message->elements)
+            {
+                if (el->getFlags().hasAny(kStructural))
+                {
+                    newElements.emplace_back(el->clone());
+                }
+            }
+
+            newElements.emplace_back(new TextElement(
+                translatedText, MessageElementFlag::Text,
+                MessageColor::Text, FontStyle::ChatMedium));
+
+            if (getSettings()->showTranslatedMessageIndicator)
+            {
+                newElements.emplace_back(new TextElement(
+                    u"(translated)"_s, MessageElementFlag::Text,
+                    MessageColor(QColor(0x72, 0x72, 0x72)),
+                    FontStyle::ChatMediumItalic));
+            }
+
+            translated->elements = std::move(newElements);
+            channel->replaceMessage(message, translated);
+        },
+        [channel](const QString &error) {
+            channel->addSystemMessage(
+                QStringLiteral("Translation failed: %1").arg(error));
+        });
 }
 
 // --- Banner/overlay rendering helpers ---

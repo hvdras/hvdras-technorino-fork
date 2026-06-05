@@ -165,6 +165,31 @@ void SplitInput::initLayout()
     replyCancelButton->hide();
     replyLabel->hide();
 
+    // command suggestion strip
+    {
+        auto suggWidget = layout.emplace<QWidget>().assign(
+            &this->ui_.commandSuggestionWidget);
+        suggWidget->setVisible(false);
+        suggWidget->setContentsMargins(4, 2, 4, 2);
+        auto *suggLayout = new QHBoxLayout(suggWidget.getElement());
+        suggLayout->setSpacing(6);
+        suggLayout->setContentsMargins(0, 0, 0, 0);
+        this->ui_.commandSuggestionLayout = suggLayout;
+        // Placeholder labels — populated by updateCommandSuggestions
+        for (int i = 0; i < 5; ++i)
+        {
+            auto *label = new QLabel();
+            label->setVisible(false);
+            label->setStyleSheet(
+                "QLabel { padding: 1px 4px; border-radius: 3px; "
+                "background: rgba(255,255,255,0.08); cursor: pointer; }");
+            label->setAlignment(Qt::AlignCenter);
+            label->setCursor(Qt::PointingHandCursor);
+            suggLayout->addWidget(label);
+        }
+        suggLayout->addStretch(1);
+    }
+
     auto inputWrapper =
         layout.emplace<QWidget>().assign(&this->ui_.inputWrapper);
     inputWrapper->setContentsMargins(1, 1, 1, 1);
@@ -203,6 +228,14 @@ void SplitInput::initLayout()
                 this->ui_.sendButton->hide();
             }
         },
+        this->managedConnections_);
+
+    getSettings()->hideEmojiButton.connect(
+        [this](const bool, auto) { this->updateEmoteButton(); },
+        this->managedConnections_);
+
+    getSettings()->showCommandSuggestions.connect(
+        [this](const bool, auto) { this->updateCommandSuggestions(); },
         this->managedConnections_);
 
     // right box
@@ -352,6 +385,77 @@ void SplitInput::updateEmoteButton()
     this->ui_.emoteButton->setFixedHeight(int(18 * scale));
     // Make button slightly wider so it's easier to click
     this->ui_.emoteButton->setFixedWidth(int(24 * scale));
+    this->ui_.emoteButton->setVisible(!getSettings()->hideEmojiButton);
+}
+
+void SplitInput::updateCommandSuggestions()
+{
+    if (!this->ui_.commandSuggestionWidget ||
+        !getSettings()->showCommandSuggestions)
+    {
+        if (this->ui_.commandSuggestionWidget)
+        {
+            this->ui_.commandSuggestionWidget->setVisible(false);
+        }
+        return;
+    }
+
+    const auto text = this->ui_.textEdit->toPlainText();
+    const auto cursorPos = this->ui_.textEdit->textCursor().position();
+    if (cursorPos <= 0 || !text.startsWith('/'))
+    {
+        this->ui_.commandSuggestionWidget->setVisible(false);
+        return;
+    }
+
+    // The current "word" being typed (up to cursor)
+    const auto partial = text.left(cursorPos).toLower();
+
+    // Gather matching commands from the built-in list
+    const auto allCommands =
+        getApp()->getCommands()->getDefaultChatterinoCommandList();
+
+    QStringList matches;
+    for (const auto &cmd : allCommands)
+    {
+        if (cmd.startsWith(partial, Qt::CaseInsensitive) && matches.size() < 5)
+        {
+            matches.append(cmd);
+        }
+    }
+
+    const auto labels = this->ui_.commandSuggestionLayout;
+    for (int i = 0; i < labels->count() - 1; ++i)  // -1 for stretch
+    {
+        auto *item = labels->itemAt(i);
+        if (!item)
+        {
+            continue;
+        }
+        auto *label = qobject_cast<QLabel *>(item->widget());
+        if (!label)
+        {
+            continue;
+        }
+
+        if (i < matches.size())
+        {
+            label->setText(matches.at(i));
+            label->setVisible(true);
+
+            // Reconnect click to insert this command
+            const auto cmd = matches.at(i);
+            disconnect(label, nullptr, nullptr, nullptr);
+            label->installEventFilter(this);
+            label->setProperty("cmdSuggestion", cmd);
+        }
+        else
+        {
+            label->setVisible(false);
+        }
+    }
+
+    this->ui_.commandSuggestionWidget->setVisible(!matches.isEmpty());
 }
 
 void SplitInput::updateCancelReplyButton()
@@ -750,6 +854,24 @@ void SplitInput::addShortcuts()
 
 bool SplitInput::eventFilter(QObject *obj, QEvent *event)
 {
+    // Handle click on command suggestion labels
+    if (event->type() == QEvent::MouseButtonRelease)
+    {
+        if (auto *label = qobject_cast<QLabel *>(obj))
+        {
+            const auto cmd = label->property("cmdSuggestion").toString();
+            if (!cmd.isEmpty())
+            {
+                this->ui_.textEdit->setPlainText(cmd + u" "_s);
+                auto cursor = this->ui_.textEdit->textCursor();
+                cursor.movePosition(QTextCursor::End);
+                this->ui_.textEdit->setTextCursor(cursor);
+                this->ui_.textEdit->setFocus();
+                return true;
+            }
+        }
+    }
+
     if (event->type() == QEvent::ShortcutOverride ||
         event->type() == QEvent::Shortcut)
     {
@@ -914,11 +1036,13 @@ void SplitInput::mousePressEvent(QMouseEvent *event)
 void SplitInput::onTextChanged()
 {
     this->updateCompletionPopup();
+    this->updateCommandSuggestions();
 }
 
 void SplitInput::onCursorPositionChanged()
 {
     this->updateCompletionPopup();
+    this->updateCommandSuggestions();
 }
 
 void SplitInput::updateCompletionPopup()

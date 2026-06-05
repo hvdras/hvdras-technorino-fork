@@ -81,6 +81,9 @@ struct Message {
     QStringList externalBadges;
 
     std::shared_ptr<QColor> highlightColor;
+    // If set, this message is a translated version of the original.
+    // The original message is stored here to allow "Show original".
+    MessagePtr translatedFrom;
     // Each reply holds a reference to the thread. When every reply is dropped,
     // the reply thread will be cleaned up by the TwitchChannel.
     // The root of the thread does not have replyThread set.

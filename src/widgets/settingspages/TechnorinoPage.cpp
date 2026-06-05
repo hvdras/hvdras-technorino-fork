@@ -114,7 +114,17 @@ void TechnorinoPage::initLayout(GeneralPageView &layout)
     SettingWidget::checkbox("Convert #text to channel links", s.channelLinks)
         ->addTo(layout);
 
-    layout.addTitle("Client detection");
+    layout.addTitle("Input Box");
+    SettingWidget::checkbox("Show command suggestions while typing",
+                            s.showCommandSuggestions)
+        ->setTooltip("Show a strip of matching /commands above the input as "
+                     "you type.")
+        ->addTo(layout);
+    SettingWidget::checkbox("Hide emoji/emote button", s.hideEmojiButton)
+        ->setTooltip("Hide the emote picker button next to the message input.")
+        ->addTo(layout);
+
+    layout.addTitle("Client");
     SettingWidget::checkbox("Client detection highlights. ",
                             s.normalNonceDetection)
         ->setTooltip("Highlights messages sent from specified clients "
@@ -125,6 +135,22 @@ void TechnorinoPage::initLayout(GeneralPageView &layout)
     SettingWidget::colorButton("iOS color", s.iosColor)->addTo(layout);
     SettingWidget::checkbox("Client detection icons. ", s.clientDetectionIcon)
         ->setTooltip("Displays client icons beside messages")
+        ->addTo(layout);
+    SettingWidget::checkbox("Show Translate message in message menu",
+                            s.showTranslateMessageContextAction)
+        ->setTooltip("Right-click any chat message to translate it inline. "
+                     "Shows (translated) indicator and a \"Show original\" "
+                     "option to revert.")
+        ->addTo(layout);
+    SettingWidget::checkbox("Show translated indicator",
+                            s.showTranslatedMessageIndicator)
+        ->setTooltip("Append (translated) after translated message text.")
+        ->addTo(layout);
+    SettingWidget::lineEdit("Translate messages to",
+                            s.messageTranslationTargetLanguage,
+                            "Language code, e.g. en, fr, ja")
+        ->setTooltip("Target language for /translate and right-click "
+                     "translate. Use a language code like en, fr, ja, es.")
         ->addTo(layout);
 
     layout.addTitle("Miscellaneous");

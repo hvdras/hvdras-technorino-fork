@@ -123,6 +123,7 @@ protected:
     void onCursorPositionChanged();
     void onTextChanged();
     void updateEmoteButton();
+    void updateCommandSuggestions();
     void updateCompletionPopup();
     void showCompletionPopup(const QString &text, CompletionKind kind);
     void hideCompletionPopup();
@@ -162,6 +163,10 @@ protected:
         MessageView *replyMessage;
         QLabel *replyLabel;
         SvgButton *cancelReplyButton;
+
+        // command suggestion strip (shown above input when typing /)
+        QWidget *commandSuggestionWidget{};
+        QHBoxLayout *commandSuggestionLayout{};
 
         // input widgets
         QWidget *inputWrapper;

@@ -334,6 +334,7 @@ private:
         QMenu *menu, const MessageLayoutElement *hoveredElement);
     void addCommandExecutionContextMenuItems(QMenu *menu,
                                              const MessageLayoutPtr &layout);
+    void translateMessage(const MessagePtr &message);
 
     int getLayoutWidth() const;
     void updatePauses();

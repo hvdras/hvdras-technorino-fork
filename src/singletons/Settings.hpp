@@ -858,6 +858,12 @@ public:
 
     // -- Translation --
     QStringSetting messageTranslationTargetLanguage{"/moltorino/translation/targetLanguage", "en"};
+    BoolSetting showTranslateMessageContextAction{"/moltorino/translation/showContextAction", true};
+    BoolSetting showTranslatedMessageIndicator{"/moltorino/translation/showIndicator", true};
+
+    // -- Input Box --
+    BoolSetting showCommandSuggestions{"/moltorino/showCommandSuggestions", true};
+    BoolSetting hideEmojiButton{"/misc/hideEmojiButton", false};
 
     // -- Miscellaneous --
     BoolSetting colorTabHighlightsByMessage{"/misc/colorTabHighlightsByMessage", true};
