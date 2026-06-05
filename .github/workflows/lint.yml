@@ -2,9 +2,6 @@
 name: Lint
 
 on:
-  push:
-    branches:
-      - technorino
   pull_request:
   merge_group:
 
