@@ -69,6 +69,7 @@ struct ParseResult {
     NukeAction action = NukeAction::Timeout;
     int timeoutSeconds = 0;
     int rangeSeconds = 0;
+    QString reason;  // optional inline timeout reason
 };
 
 struct NukeTarget {
@@ -130,7 +131,9 @@ QHash<QString, QVector<std::shared_ptr<NukeJob>>> &activeNukes()
 QString usage()
 {
     return QStringLiteral(
-        "Usage: /nuke <text> <timeout|ban|delete> <range>, for example /nuke bots 10m 30s. Use /nuke stop to cancel active nukes.");
+        "Usage: /nuke <text> <timeout|ban|delete> <range> [reason], "
+        "for example /nuke bots 10m 30s or /nuke bots 10m 30s \"ban evading\". "
+        "Use /nuke stop to cancel active nukes.");
 }
 
 QString spamUsage()
@@ -721,6 +724,25 @@ ParseResult parseNukeInput(const QString &input, bool allowPartialPreview)
     }
     result.rangeSeconds = static_cast<int>(range);
     result.complete = true;
+
+    // Optional 5th argument: inline reason (quoted or unquoted)
+    // e.g. /nuke bots 10s 1m "ban evading bots"
+    if (words.size() >= 5)
+    {
+        const auto reasonParts = words.mid(4);
+        auto reason = reasonParts.join(QLatin1Char(' ')).trimmed();
+        if (reason.size() >= 2 &&
+            ((reason.startsWith('"') && reason.endsWith('"')) ||
+             (reason.startsWith('\'') && reason.endsWith('\''))))
+        {
+            reason = reason.mid(1, reason.size() - 2).trimmed();
+        }
+        if (!reason.isEmpty())
+        {
+            result.reason = reason;
+        }
+    }
+
     return result;
 }
 
@@ -952,7 +974,9 @@ void performNukeAction(const std::shared_ptr<NukeJob> &job,
             getHelix()->banUser(
                 twitchChannel->roomId(), job->moderatorID, target.userID,
                 duration,
-                getSettings()->nukeModerationMessage.getValue().trimmed(),
+                !job->plan.reason.isEmpty()
+                    ? job->plan.reason
+                    : getSettings()->nukeModerationMessage.getValue().trimmed(),
                 [job] {
                     onNukeActionFinished(job, true, false, false);
                 },

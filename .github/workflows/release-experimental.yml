@@ -159,18 +159,51 @@ jobs:
 
             **⚠️ Experimental build** — may contain unstable or work-in-progress features.
 
-            Built from commit ${{ github.sha }} on branch `technorino`.
+            Built from commit ${{ github.sha }}.
 
-            **What's new in this experimental:**
-            - /founders, /blockterm, /unblockterm commands
-            - AutoMod nuke integration
-            - Auto-translate incoming messages
-            - Outgoing translation button (TL)
-            - Prediction and Poll banners (read-only, Helix-polled)
-            - macOS default font size fix
+            ---
+
+            ### What's in Technorino
+
+            **Moderation**
+            - `/nuke <text> <timeout|ban|delete> <range> [reason]` — mass-action matching messages, now with optional inline reason
+            - `/blockterm` / `/unblockterm` — manage AutoMod blocked terms via Helix
+            - AutoMod integration: `/nuke` also scans and denies AutoMod-held messages
+            - Repeated message detector — shows `x2`, `x3` counters on repeated messages
+            - Usercard mod action visibility settings
+
+            **Translation**
+            - Right-click any message → **Translate message** (inline, replaces message in-place)
+            - `/translate`, `/translateto`, `/tl` commands
+            - Auto-translate incoming messages (off by default)
+            - TL button in input bar
+
+            **Banners**
+            - Pinned message banner (Helix-polled, 30s refresh)
+            - Prediction banner (read-only, Helix-polled)
+            - Poll banner (read-only, Helix-polled)
+            - Banner stacking modes (Prefer pinned / Prefer prediction / Intelligent / Show all)
+
+            **Poll & Prediction**
+            - Poll and Prediction creation dialogs (broadcaster only)
+            - Lock / Resolve / Cancel prediction menu (mods)
+            - End Poll menu (mods)
+            - All via Helix — no GQL
+
+            **Input**
+            - Command suggestion strip above input when typing `/`
+            - Hide emoji button setting
+
+            **Other commands**
+            - `/founders` — list channel founders
+
+            **Settings** (Technorino settings page)
+            - Full Pinned Messages section, Poll and Prediction section, Moderation section, Client section, Input Box section
+
+            ---
 
             **Downloads:**
-            - `*-installer.exe` — Windows installer
+            - `*-installer.exe` — Windows installer (recommended)
             - `*-portable.zip` — Portable zip
           draft: false
           prerelease: true

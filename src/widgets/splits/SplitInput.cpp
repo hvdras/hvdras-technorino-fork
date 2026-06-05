@@ -1898,7 +1898,7 @@ void SplitInput::openPollDialog()
                              s->roomId(), title, choices,
                              std::chrono::seconds(durationSpin->value()),
                              0,
-                             [](const HelixPoll &) {},
+                             [] {},
                              [chanWeak](const QString &err) {
                                  if (auto ch =
                                          std::dynamic_pointer_cast<TwitchChannel>(
@@ -2033,9 +2033,9 @@ void SplitInput::openPredictionDialog()
             const auto chanWeak = s->weakFromThis();
             dlg->accept();  // close before async call
             getHelix()->createPrediction(
-                s->roomId(), title, {o1, o2},
+                s->roomId(), title, QStringList{o1, o2},
                 std::chrono::seconds(durationSpin->value()),
-                [](const HelixPrediction &) {},
+                [] {},
                 [chanWeak](const QString &err) {
                     if (auto ch = std::dynamic_pointer_cast<TwitchChannel>(
                             chanWeak.lock()))
