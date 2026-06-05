@@ -164,6 +164,41 @@ public:
         int slowMode = 0;
     };
 
+    struct PredictionOutcome {
+        QString id;
+        QString title;
+        QString color;
+        int channelPoints = 0;
+        int users = 0;
+    };
+
+    struct PredictionEvent {
+        QString id;
+        QString title;
+        QString status;
+        std::vector<PredictionOutcome> outcomes;
+        int predictionWindowSeconds = 0;
+        QDateTime createdAt;
+        std::optional<QDateTime> lockedAt;
+        QString winningOutcomeId;
+    };
+
+    struct PollChoice {
+        QString id;
+        QString title;
+        int votes = 0;
+    };
+
+    struct PollEvent {
+        QString id;
+        QString title;
+        QString status;
+        std::vector<PollChoice> choices;
+        int durationSeconds = 0;
+        QDateTime createdAt;
+        std::optional<QDateTime> endsAt;
+    };
+
     struct PinnedMessage {
         QString pinId;
         QString messageId;
@@ -239,6 +274,14 @@ public:
     void setPinnedMessage(std::optional<PinnedMessage> pin);
     void refreshPinnedMessage();
     void handlePinnedChatUpdate(const QJsonObject &data);
+
+    SharedAccessGuard<const std::optional<PredictionEvent>> accessPrediction() const;
+    void setActivePrediction(std::optional<PredictionEvent> prediction);
+    void refreshActivePrediction();
+
+    SharedAccessGuard<const std::optional<PollEvent>> accessPoll() const;
+    void setActivePoll(std::optional<PollEvent> poll);
+    void refreshActivePoll();
 
     /**
      * Records that the channel is no longer joined.
@@ -371,6 +414,8 @@ public:
 
     pajlada::Signals::NoArgSignal roomModesChanged;
     pajlada::Signals::NoArgSignal pinnedMessageChanged;
+    pajlada::Signals::NoArgSignal predictionChanged;
+    pajlada::Signals::NoArgSignal pollChanged;
 
     pajlada::Signals::NoArgSignal destroyed;
 
@@ -538,6 +583,8 @@ private:
     UniqueAccess<RoomModes> roomModes;
     UniqueAccess<std::optional<PinnedMessage>> currentPin_;
     std::atomic<int> pinnedMessageRefreshFailures_{0};
+    UniqueAccess<std::optional<PredictionEvent>> currentPrediction_;
+    UniqueAccess<std::optional<PollEvent>> currentPoll_;
     bool disconnected_{};
     std::optional<std::chrono::time_point<std::chrono::system_clock>>
         lastConnectedAt_{};

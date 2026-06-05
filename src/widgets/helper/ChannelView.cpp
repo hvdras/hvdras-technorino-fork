@@ -1376,6 +1376,16 @@ void ChannelView::messageAppended(MessagePtr &message,
         this->scrollBar_->addHighlight(message->getScrollBarHighlight());
     }
 
+    // Auto-translate incoming messages if enabled
+    if (getSettings()->autoTranslateIncomingMessages &&
+        this->context_ == Context::None && this->split_ != nullptr &&
+        message->translatedFrom == nullptr &&
+        !message->messageText.isEmpty() &&
+        !message->flags.has(MessageFlag::System))
+    {
+        this->translateMessage(message);
+    }
+
     this->queueLayout();
 }
 

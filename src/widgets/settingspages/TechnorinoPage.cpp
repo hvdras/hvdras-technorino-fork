@@ -146,6 +146,16 @@ void TechnorinoPage::initLayout(GeneralPageView &layout)
                             s.showTranslatedMessageIndicator)
         ->setTooltip("Append (translated) after translated message text.")
         ->addTo(layout);
+    SettingWidget::checkbox("Show translation button in input",
+                            s.showOutgoingTranslationButton)
+        ->setTooltip("Show a TL button next to the input box that translates "
+                     "your message to the target language before sending.")
+        ->addTo(layout);
+    SettingWidget::checkbox("Auto-translate incoming messages",
+                            s.autoTranslateIncomingMessages)
+        ->setTooltip("Automatically translate all incoming chat messages "
+                     "inline. Uses the same target language as /translate.")
+        ->addTo(layout);
     SettingWidget::lineEdit("Translate messages to",
                             s.messageTranslationTargetLanguage,
                             "Language code, e.g. en, fr, ja")

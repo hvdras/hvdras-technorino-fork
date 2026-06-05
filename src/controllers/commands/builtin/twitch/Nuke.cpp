@@ -7,6 +7,7 @@
 #include "messages/Message.hpp"
 #include "messages/MessageFlag.hpp"
 #include "providers/twitch/api/Helix.hpp"
+#include "providers/twitch/TwitchIrcServer.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
 #include "providers/twitch/TwitchBadge.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
@@ -1123,6 +1124,65 @@ void startNukeJob(const CommandContext &ctx, const ParseResult &plan)
 
     auto pastMatches = collectPastMatches(plan, ctx.channel);
     enqueueMatches(job, pastMatches);
+
+    // Also scan AutoMod held messages for this channel
+    const auto automodChannel = getApp()->getTwitch()->getAutomodChannel();
+    if (automodChannel && plan.action != NukeAction::Delete)
+    {
+        const auto channelName = ctx.twitchChannel->getName();
+        const auto cutoff =
+            QDateTime::currentDateTimeUtc().addSecs(-plan.rangeSeconds);
+        const auto automodSnapshot = automodChannel->getMessageSnapshot();
+        for (const auto &msg : automodSnapshot)
+        {
+            if (msg == nullptr || msg->channelName != channelName)
+            {
+                continue;
+            }
+            if (msg->serverReceivedTime.isValid() &&
+                msg->serverReceivedTime < cutoff)
+            {
+                continue;
+            }
+            if (msg->userID.isEmpty() || msg->loginName.isEmpty())
+            {
+                continue;
+            }
+            if (!messageMatches(plan, msg))
+            {
+                continue;
+            }
+            // Strip "automod_" prefix to get the real message ID
+            const auto automodMsgID =
+                msg->id.startsWith(QStringLiteral("automod_"))
+                    ? msg->id.mid(8)
+                    : msg->id;
+            if (automodMsgID.isEmpty())
+            {
+                continue;
+            }
+            // Deny the AutoMod-held message
+            getHelix()->manageAutoModMessages(
+                job->moderatorID, automodMsgID, QStringLiteral("DENY"),
+                [] {},
+                [](auto) {});
+            // Also ban/timeout the user
+            if (!job->processedUsers.contains(msg->userID))
+            {
+                job->processedUsers.insert(msg->userID);
+                NukeTarget target{
+                    .messageID = automodMsgID,
+                    .userID = msg->userID,
+                    .loginName = msg->loginName,
+                    .displayName = msg->displayName.isEmpty()
+                                       ? msg->loginName
+                                       : msg->displayName,
+                };
+                enqueueTarget(job, target);
+                job->matchingMessages++;
+            }
+        }
+    }
 
     job->messageConnection = ctx.channel->messageAppended.connect(
         [job](MessagePtr &message, auto) mutable {

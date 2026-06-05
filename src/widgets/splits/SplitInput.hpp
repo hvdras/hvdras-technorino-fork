@@ -123,6 +123,8 @@ protected:
     void onCursorPositionChanged();
     void onTextChanged();
     void updateEmoteButton();
+    void updateTranslateButton();
+    void translateInput();
     void updateCommandSuggestions();
     void updateCompletionPopup();
     void showCompletionPopup(const QString &text, CompletionKind kind);
@@ -175,6 +177,7 @@ protected:
         QLabel *textEditLength;
         LabelButton *sendButton;
         QLabel *sendWaitStatus;
+        LabelButton *translateButton{};
         SvgButton *emoteButton;
     } ui_;
 

@@ -694,6 +694,7 @@ MessagePtr makeAutomodHoldMessageBody(
     builder.emplace<TimestampElement>(time.time());
     builder.emplace<TwitchModerationElement>();
     builder->loginName = event.userLogin.qt();
+    builder->userID = event.userID.qt();
 
     auto displayName = localizedDisplayName(event);
     // sender username

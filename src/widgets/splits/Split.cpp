@@ -32,6 +32,8 @@
 #include "widgets/dialogs/UserInfoPopup.hpp"
 #include "widgets/helper/ChannelView.hpp"
 #include "widgets/helper/PinnedMessageBanner.hpp"
+#include "widgets/helper/PollBanner.hpp"
+#include "widgets/helper/PredictionBanner.hpp"
 #include "widgets/helper/DebugPopup.hpp"
 #include "widgets/helper/NotebookTab.hpp"
 #include "widgets/helper/ResizingTextEdit.hpp"
@@ -95,6 +97,8 @@ Split::Split(QWidget *parent)
     , vbox_(new QVBoxLayout(this))
     , header_(new SplitHeader(this))
     , pinnedBanner_(new PinnedMessageBanner(this, this))
+    , predictionBanner_(new PredictionBanner(this))
+    , pollBanner_(new PollBanner(this))
     , view_(new ChannelView(this, this, ChannelView::Context::None,
                             getSettings()->scrollbackSplitLimit))
     , input_(new SplitInput(this))
@@ -110,6 +114,8 @@ Split::Split(QWidget *parent)
 
     this->vbox_->addWidget(this->header_);
     this->vbox_->addWidget(this->pinnedBanner_);
+    this->vbox_->addWidget(this->predictionBanner_);
+    this->vbox_->addWidget(this->pollBanner_);
     this->vbox_->addWidget(this->view_, 1);
     this->vbox_->addWidget(this->input_);
 
@@ -956,12 +962,21 @@ void Split::setChannel(IndirectChannel newChannel)
     this->channelSignalHolder_.clear();
 
     this->pinnedBanner_->setPinnedMessage(std::nullopt, nullptr);
+    this->predictionBanner_->setPrediction(std::nullopt);
+    this->pollBanner_->setPoll(std::nullopt);
 
     if (this->pinnedRefreshTimer_)
     {
         this->pinnedRefreshTimer_->stop();
         this->pinnedRefreshTimer_->deleteLater();
         this->pinnedRefreshTimer_ = nullptr;
+    }
+
+    if (this->predictionPollRefreshTimer_)
+    {
+        this->predictionPollRefreshTimer_->stop();
+        this->predictionPollRefreshTimer_->deleteLater();
+        this->predictionPollRefreshTimer_ = nullptr;
     }
 
     TwitchChannel *tc = dynamic_cast<TwitchChannel *>(newChannel.get().get());
@@ -1074,6 +1089,34 @@ void Split::setChannel(IndirectChannel newChannel)
             this->pinnedBanner_->dismissed, [this] {
                 this->pinnedBanner_->setVisible(false);
             });
+
+        // Wire prediction and poll banners
+        this->channelSignalHolder_.managedConnect(
+            tc->predictionChanged, [this, tc] {
+                this->predictionBanner_->setPrediction(
+                    *tc->accessPrediction());
+            });
+        this->channelSignalHolder_.managedConnect(
+            tc->pollChanged, [this, tc] {
+                this->pollBanner_->setPoll(*tc->accessPoll());
+            });
+
+        this->predictionBanner_->setPrediction(*tc->accessPrediction());
+        this->pollBanner_->setPoll(*tc->accessPoll());
+
+        tc->refreshActivePrediction();
+        tc->refreshActivePoll();
+
+        // Poll every 30s for prediction/poll updates
+        this->predictionPollRefreshTimer_ = new QTimer(this);
+        this->predictionPollRefreshTimer_->setInterval(30000);
+        this->predictionPollRefreshTimer_->setTimerType(Qt::VeryCoarseTimer);
+        QObject::connect(this->predictionPollRefreshTimer_, &QTimer::timeout,
+                         [tc] {
+                             tc->refreshActivePrediction();
+                             tc->refreshActivePoll();
+                         });
+        this->predictionPollRefreshTimer_->start();
     }
     else if (kc != nullptr)
     {

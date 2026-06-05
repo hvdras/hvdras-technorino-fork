@@ -20,6 +20,8 @@ namespace chatterino {
 
 class ChannelView;
 class PinnedMessageBanner;
+class PredictionBanner;
+class PollBanner;
 class SplitHeader;
 class SplitInput;
 class SplitContainer;
@@ -166,7 +168,10 @@ private:
     QVBoxLayout *const vbox_;
     SplitHeader *const header_;
     PinnedMessageBanner *const pinnedBanner_;
+    PredictionBanner *const predictionBanner_;
+    PollBanner *const pollBanner_;
     QTimer *pinnedRefreshTimer_{};
+    QTimer *predictionPollRefreshTimer_{};
     ChannelView *const view_;
     SplitInput *const input_;
     SplitOverlay *const overlay_;

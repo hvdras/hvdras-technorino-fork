@@ -17,6 +17,7 @@
 #include "providers/twitch/TwitchCommon.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
 #include "singletons/Fonts.hpp"
+#include "providers/translation/Translator.hpp"
 #include "singletons/Settings.hpp"
 #include "singletons/Theme.hpp"
 #include "singletons/WindowManager.hpp"
@@ -246,6 +247,12 @@ void SplitInput::initLayout()
         this->ui_.sendWaitStatus->setHidden(true);
         hbox->addWidget(this->ui_.sendWaitStatus);
 
+        this->ui_.translateButton = new LabelButton("TL", nullptr);
+        this->ui_.translateButton->setToolTip(
+            "Translate input to target language before sending");
+        this->ui_.translateButton->setVisible(false);
+        box->addWidget(this->ui_.translateButton, 0, Qt::AlignRight);
+
         this->ui_.emoteButton = new SvgButton(
             {
                 .dark = ":/buttons/emote.svg",
@@ -275,6 +282,11 @@ void SplitInput::initLayout()
         this->openEmotePopup();
     });
 
+    // translate button
+    QObject::connect(this->ui_.translateButton, &Button::leftClicked, [this] {
+        this->translateInput();
+    });
+
     // These must come AFTER emoteButton is created — pajlada calls the
     // callback immediately on connect, so emoteButton must already exist.
     getSettings()->hideEmojiButton.connect(
@@ -282,6 +294,9 @@ void SplitInput::initLayout()
         this->managedConnections_);
     getSettings()->showCommandSuggestions.connect(
         [this](const bool, auto) { this->updateCommandSuggestions(); },
+        this->managedConnections_);
+    getSettings()->showOutgoingTranslationButton.connect(
+        [this](const bool, auto) { this->updateTranslateButton(); },
         this->managedConnections_);
 
     // clear input and remove reply thread
@@ -1680,6 +1695,54 @@ void SplitInput::updateChannel()
     auto selected = this->split_->getSelectedChannel();
     this->ui_.textEdit->setCompleter(new QCompleter(selected->completionModel));
     this->inputHighlighter->setChannel(selected);
+}
+
+void SplitInput::updateTranslateButton()
+{
+    if (this->ui_.translateButton)
+    {
+        this->ui_.translateButton->setVisible(
+            getSettings()->showOutgoingTranslationButton);
+    }
+}
+
+void SplitInput::translateInput()
+{
+    const auto text = this->ui_.textEdit->toPlainText().trimmed();
+    if (text.isEmpty())
+    {
+        return;
+    }
+
+    const auto targetLanguage = normalizedTranslationTargetLanguage(
+        getSettings()->messageTranslationTargetLanguage.getValue());
+
+    this->ui_.translateButton->setEnabled(false);
+
+    requestTextTranslation(
+        text, targetLanguage, this,
+        [this](const TranslationResult &result) {
+            auto translated = result.translatedText.trimmed();
+            translated.replace('\n', ' ');
+            if (!translated.isEmpty())
+            {
+                this->ui_.textEdit->setPlainText(translated);
+                auto cursor = this->ui_.textEdit->textCursor();
+                cursor.movePosition(QTextCursor::End);
+                this->ui_.textEdit->setTextCursor(cursor);
+            }
+            if (this->ui_.translateButton)
+            {
+                this->ui_.translateButton->setEnabled(true);
+            }
+        },
+        [this](const QString &error) {
+            Q_UNUSED(error)
+            if (this->ui_.translateButton)
+            {
+                this->ui_.translateButton->setEnabled(true);
+            }
+        });
 }
 
 }  // namespace chatterino

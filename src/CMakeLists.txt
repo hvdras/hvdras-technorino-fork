@@ -107,6 +107,10 @@ set(SOURCE_FILES
         controllers/commands/builtin/twitch/GetVIPs.hpp
         controllers/commands/builtin/twitch/LowTrust.cpp
         controllers/commands/builtin/twitch/LowTrust.hpp
+        controllers/commands/builtin/twitch/BlockedTerms.cpp
+        controllers/commands/builtin/twitch/BlockedTerms.hpp
+        controllers/commands/builtin/twitch/GetFounders.cpp
+        controllers/commands/builtin/twitch/GetFounders.hpp
         controllers/commands/builtin/twitch/Nuke.cpp
         controllers/commands/builtin/twitch/Nuke.hpp
         controllers/commands/builtin/twitch/Pin.cpp
@@ -842,6 +846,10 @@ set(SOURCE_FILES
         widgets/helper/MessageView.hpp
         widgets/helper/PinnedMessageBanner.cpp
         widgets/helper/PinnedMessageBanner.hpp
+        widgets/helper/PollBanner.cpp
+        widgets/helper/PollBanner.hpp
+        widgets/helper/PredictionBanner.cpp
+        widgets/helper/PredictionBanner.hpp
         widgets/helper/MicroNotebook.cpp
         widgets/helper/MicroNotebook.hpp
         widgets/helper/NotebookTab.cpp

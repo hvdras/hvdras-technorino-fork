@@ -768,6 +768,8 @@ void TwitchChannel::roomIdChanged()
     }
     this->refreshPubSub();
     this->refreshPinnedMessage();
+    this->refreshActivePrediction();
+    this->refreshActivePoll();
     this->refreshBadges();
     this->refreshCheerEmotes();
     this->refreshTwitchChannelEmotes(false);
@@ -2627,6 +2629,137 @@ void TwitchChannel::refreshPinnedMessage()
                 << "Failed to fetch pinned message for" << shared->getName()
                 << ":" << error;
         });
+}
+
+SharedAccessGuard<const std::optional<TwitchChannel::PredictionEvent>>
+    TwitchChannel::accessPrediction() const
+{
+    return this->currentPrediction_.accessConst();
+}
+
+void TwitchChannel::setActivePrediction(std::optional<PredictionEvent> pred)
+{
+    {
+        auto locked = this->currentPrediction_.access();
+        *locked = std::move(pred);
+    }
+    this->predictionChanged.invoke();
+}
+
+void TwitchChannel::refreshActivePrediction()
+{
+    if (this->roomId().isEmpty())
+    {
+        return;
+    }
+
+    auto account = getApp()->getAccounts()->twitch.getCurrent();
+    if (!account || account->isAnon())
+    {
+        return;
+    }
+
+    const auto weak = this->weak_from_this();
+    getHelix()->getPredictions(
+        this->roomId(), {}, 20, {},
+        [weak](const HelixPredictions &result) {
+            auto shared =
+                std::dynamic_pointer_cast<TwitchChannel>(weak.lock());
+            if (!shared)
+            {
+                return;
+            }
+            std::optional<PredictionEvent> active;
+            for (const auto &p : result.predictions)
+            {
+                if (p.status == QStringLiteral("ACTIVE") ||
+                    p.status == QStringLiteral("LOCKED"))
+                {
+                    PredictionEvent event;
+                    event.id = p.id;
+                    event.title = p.title;
+                    event.status = p.status;
+                    event.winningOutcomeId = p.winningOutcomeID;
+                    for (const auto &o : p.outcomes)
+                    {
+                        PredictionOutcome outcome;
+                        outcome.id = o.id;
+                        outcome.title = o.title;
+                        outcome.channelPoints = o.channelPoints;
+                        outcome.users = o.users;
+                        event.outcomes.push_back(std::move(outcome));
+                    }
+                    active = std::move(event);
+                    break;
+                }
+            }
+            shared->setActivePrediction(std::move(active));
+        },
+        [](const QString &) {});
+}
+
+SharedAccessGuard<const std::optional<TwitchChannel::PollEvent>>
+    TwitchChannel::accessPoll() const
+{
+    return this->currentPoll_.accessConst();
+}
+
+void TwitchChannel::setActivePoll(std::optional<PollEvent> poll)
+{
+    {
+        auto locked = this->currentPoll_.access();
+        *locked = std::move(poll);
+    }
+    this->pollChanged.invoke();
+}
+
+void TwitchChannel::refreshActivePoll()
+{
+    if (this->roomId().isEmpty())
+    {
+        return;
+    }
+
+    auto account = getApp()->getAccounts()->twitch.getCurrent();
+    if (!account || account->isAnon())
+    {
+        return;
+    }
+
+    const auto weak = this->weak_from_this();
+    getHelix()->getPolls(
+        this->roomId(), {}, 20, {},
+        [weak](const HelixPolls &result) {
+            auto shared =
+                std::dynamic_pointer_cast<TwitchChannel>(weak.lock());
+            if (!shared)
+            {
+                return;
+            }
+            std::optional<PollEvent> active;
+            for (const auto &p : result.polls)
+            {
+                if (p.status == QStringLiteral("ACTIVE"))
+                {
+                    PollEvent event;
+                    event.id = p.id;
+                    event.title = p.title;
+                    event.status = p.status;
+                    for (const auto &c : p.choices)
+                    {
+                        PollChoice choice;
+                        choice.id = c.id;
+                        choice.title = c.title;
+                        choice.votes = c.votes;
+                        event.choices.push_back(std::move(choice));
+                    }
+                    active = std::move(event);
+                    break;
+                }
+            }
+            shared->setActivePoll(std::move(active));
+        },
+        [](const QString &) {});
 }
 
 void TwitchChannel::handlePinnedChatUpdate(const QJsonObject &data)

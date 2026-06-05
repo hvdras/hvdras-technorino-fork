@@ -47,7 +47,7 @@ class Args;
 #else
 #    ifdef Q_OS_MACOS
 #        define DEFAULT_FONT_FAMILY "Helvetica Neue"
-#        define DEFAULT_FONT_SIZE 16
+#        define DEFAULT_FONT_SIZE 10
 #    else
 #        define DEFAULT_FONT_FAMILY "Arial"
 #        define DEFAULT_FONT_SIZE 11
@@ -858,6 +858,8 @@ public:
 
     // -- Translation --
     QStringSetting messageTranslationTargetLanguage{"/moltorino/translation/targetLanguage", "en"};
+    BoolSetting autoTranslateIncomingMessages{"/moltorino/translation/autoTranslate", false};
+    BoolSetting showOutgoingTranslationButton{"/moltorino/client/showOutgoingTranslationButton", false};
     BoolSetting showTranslateMessageContextAction{"/moltorino/translation/showContextAction", true};
     BoolSetting showTranslatedMessageIndicator{"/moltorino/translation/showIndicator", true};
 
