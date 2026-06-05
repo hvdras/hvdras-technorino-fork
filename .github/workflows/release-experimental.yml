@@ -1,0 +1,180 @@
+name: Release (Experimental)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Experimental version tag (e.g. 7.5.5-exp-1)"
+        required: true
+        type: string
+
+env:
+  CONAN_VERSION: 2.28.1
+  QT_VERSION: "6.9.3"
+  C2_ENABLE_LTO: "true"
+  C2_ENABLE_CRASHPAD: "true"
+
+jobs:
+  build-windows:
+    name: "Build Windows x64 (Experimental)"
+    runs-on: windows-latest
+    env:
+      C2_ARCH: x86-64
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Tag experimental commit
+        run: |
+          git config user.email "actions@github.com"
+          git config user.name "GitHub Actions"
+          git tag "exp-${{ github.event.inputs.version }}"
+          git push origin "exp-${{ github.event.inputs.version }}"
+        shell: bash
+
+      - name: Install Qt6
+        uses: jurplel/install-qt-action@v4.3.1
+        with:
+          cache: true
+          cache-key-prefix: windows-x64-QtCache-${{ env.QT_VERSION }}-v2
+          modules: qtimageformats
+          version: ${{ env.QT_VERSION }}
+
+      - name: Enable Developer Command Prompt
+        uses: Chatterino/msvc-dev-cmd@v2.0.5
+        with:
+          arch: x64
+
+      - name: Setup sccache
+        uses: hendrikmuhs/ccache-action@v1.2.23
+        with:
+          variant: sccache
+          save: true
+          key: sccache-experimental-windows-x64-${{ env.QT_VERSION }}
+          restore-keys: |
+            sccache-experimental-windows-x64-${{ env.QT_VERSION }}
+            sccache-release-windows-x64-${{ env.QT_VERSION }}
+            sccache-build-windows-latest-X64-${{ env.QT_VERSION }}
+
+      - name: Cache conan packages
+        uses: actions/cache@v5
+        with:
+          key: Windows-X64-conan-user-${{ hashFiles('**/conanfile.py') }}-QT6
+          path: ~/.conan2/
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install and Setup Conan
+        run: |
+          pip install conan==${{env.CONAN_VERSION}}
+          conan --version
+          conan profile detect -f
+        shell: bash
+
+      - name: Install dependencies
+        run: |
+          mkdir build
+          cd build
+          conan install .. \
+              -s build_type=RelWithDebInfo \
+              -c tools.cmake.cmaketoolchain:generator="Ninja" \
+              -b missing \
+              --output-folder=. \
+              -o with_openssl3=True
+          conan cache clean --source --build --download "*"
+        shell: bash
+
+      - name: Build
+        shell: pwsh
+        run: |
+          cd build
+          cmake `
+              -G Ninja `
+              -DCMAKE_BUILD_TYPE=RelWithDebInfo `
+              -DCMAKE_TOOLCHAIN_FILE="conan_toolchain.cmake" `
+              -DUSE_PRECOMPILED_HEADERS=ON `
+              -DBUILD_WITH_CRASHPAD="$Env:C2_ENABLE_CRASHPAD" `
+              -DCHATTERINO_LTO="$Env:C2_ENABLE_LTO" `
+              -DFORCE_JSON_GENERATION=On `
+              -DSKIP_JSON_GENERATION=Off `
+              -DCHATTERINO_NIGHTLY_BUILD=Off `
+              -DCHATTERINO_SPELLCHECK=On `
+              ..
+          ninja
+
+      - name: Build crashpad handler
+        shell: pwsh
+        run: |
+          cd build
+          ninja chatterino-crash-handler
+          mkdir Chatterino2/crashpad
+          cp bin/crashpad/crashpad-handler.exe Chatterino2/crashpad/crashpad-handler.exe
+          7z a bin/chatterino-${{ env.C2_ARCH }}-Qt-${{ env.QT_VERSION }}.pdb.7z bin/chatterino.pdb
+
+      - name: Deploy Qt
+        working-directory: build
+        run: |
+          windeployqt bin/chatterino.exe --release --no-compiler-runtime --no-translations --no-opengl-sw --dir Chatterino2/ --force-openssl
+          cp bin/chatterino.exe Chatterino2/
+          ..\.CI\deploy-crt.ps1 Chatterino2
+
+      - name: Package as zip
+        working-directory: build
+        run: |
+          7z a chatterino-windows-${{ env.C2_ARCH }}-Qt-${{ env.QT_VERSION }}.zip Chatterino2/
+
+      - name: Install InnoSetup
+        run: choco install innosetup
+
+      - name: Add InnoSetup to PATH
+        run: echo "C:\Program Files (x86)\Inno Setup 6\" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Build installer
+        id: build-installer
+        working-directory: build
+        run: ..\.CI\build-installer.ps1
+        shell: powershell
+
+      - name: Bundle portable
+        id: bundle-portable
+        working-directory: build
+        run: ..\.CI\bundle-portable.ps1
+        shell: powershell
+
+      - name: Create GitHub Release (Experimental)
+        uses: ncipollo/release-action@v1.14.0
+        with:
+          tag: "exp-${{ github.event.inputs.version }}"
+          name: "Technorino Experimental ${{ github.event.inputs.version }}"
+          body: |
+            ## Technorino Experimental ${{ github.event.inputs.version }}
+
+            **⚠️ Experimental build** — may contain unstable or work-in-progress features.
+
+            Built from commit ${{ github.sha }} on branch `technorino`.
+
+            **What's new in this experimental:**
+            - /founders, /blockterm, /unblockterm commands
+            - AutoMod nuke integration
+            - Auto-translate incoming messages
+            - Outgoing translation button (TL)
+            - Prediction and Poll banners (read-only, Helix-polled)
+            - macOS default font size fix
+
+            **Downloads:**
+            - `*-installer.exe` — Windows installer
+            - `*-portable.zip` — Portable zip
+          draft: false
+          prerelease: true
+          artifactErrorsFailBuild: true
+          artifacts: |
+            build/${{ steps.build-installer.outputs.C2_INSTALLER_BASE_NAME }}.exe
+            build/${{ steps.bundle-portable.outputs.C2_PORTABLE_BASE_NAME }}.zip
