@@ -1,9 +1,7 @@
 name: "nix"
 
 on:
-  push:
-    branches:
-      - technorino
+  workflow_dispatch:  # manual trigger only — requires Attic/Cachix secrets not set in this fork
 
 concurrency:
   group: nix-${{ github.ref }}

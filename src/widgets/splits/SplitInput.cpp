@@ -1801,7 +1801,8 @@ void SplitInput::openPollDialog()
                 {
                     getHelix()->endPoll(
                         s->roomId(), s->accessPoll()->value().id, true,
-                        [] {}, [](const QString &) {});
+                        [](const HelixPoll &) {},
+                        [](const QString &) {});
                 }
             });
             menu->addAction("End poll (show results)", [weak] {
@@ -1810,7 +1811,8 @@ void SplitInput::openPollDialog()
                 {
                     getHelix()->endPoll(
                         s->roomId(), s->accessPoll()->value().id, false,
-                        [] {}, [](const QString &) {});
+                        [](const HelixPoll &) {},
+                        [](const QString &) {});
                 }
             });
             menu->popup(QCursor::pos());
@@ -1923,8 +1925,9 @@ void SplitInput::openPredictionDialog()
                         weak.lock()))
                 {
                     getHelix()->endPrediction(
-                        s->roomId(), predId, false, {},
-                        [] {}, [](const QString &) {});
+                        s->roomId(), predId, false, QString{},
+                        [](const HelixPrediction &) {},
+                        [](const QString &) {});
                 }
             });
             menu->addSeparator();
@@ -1940,7 +1943,8 @@ void SplitInput::openPredictionDialog()
                                     {
                                         getHelix()->endPrediction(
                                             s->roomId(), predId, false,
-                                            oid, [] {},
+                                            oid,
+                                            [](const HelixPrediction &) {},
                                             [](const QString &) {});
                                     }
                                 });
@@ -1951,8 +1955,9 @@ void SplitInput::openPredictionDialog()
                         weak.lock()))
                 {
                     getHelix()->endPrediction(
-                        s->roomId(), predId, true, {},
-                        [] {}, [](const QString &) {});
+                        s->roomId(), predId, true, QString{},
+                        [](const HelixPrediction &) {},
+                        [](const QString &) {});
                 }
             });
             menu->popup(QCursor::pos());
