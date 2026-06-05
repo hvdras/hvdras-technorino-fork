@@ -249,9 +249,25 @@ void SplitInput::initLayout()
     auto box = hboxLayout.emplace<QVBoxLayout>().withoutMargin();
     box->setSpacing(0);
     {
+        // Top row: poll/predict/translate buttons + length label
         auto hbox = box.emplace<QHBoxLayout>().withoutMargin();
+        hbox->setSpacing(2);
+
+        this->ui_.pollButton = new LabelButton("Poll", nullptr);
+        this->ui_.pollButton->setVisible(false);
+        hbox->addWidget(this->ui_.pollButton);
+
+        this->ui_.predictButton = new LabelButton("Predict", nullptr);
+        this->ui_.predictButton->setVisible(false);
+        hbox->addWidget(this->ui_.predictButton);
+
+        this->ui_.translateButton = new LabelButton("TL", nullptr);
+        this->ui_.translateButton->setToolTip(
+            "Translate input to target language before sending");
+        this->ui_.translateButton->setVisible(false);
+        hbox->addWidget(this->ui_.translateButton);
+
         this->ui_.textEditLength = new QLabel();
-        // Right-align the labels contents
         this->ui_.textEditLength->setAlignment(Qt::AlignRight);
         hbox->addWidget(this->ui_.textEditLength);
 
@@ -260,20 +276,7 @@ void SplitInput::initLayout()
         this->ui_.sendWaitStatus->setHidden(true);
         hbox->addWidget(this->ui_.sendWaitStatus);
 
-        this->ui_.translateButton = new LabelButton("TL", nullptr);
-        this->ui_.translateButton->setToolTip(
-            "Translate input to target language before sending");
-        this->ui_.translateButton->setVisible(false);
-        box->addWidget(this->ui_.translateButton, 0, Qt::AlignRight);
-
-        this->ui_.pollButton = new LabelButton("Poll", nullptr);
-        this->ui_.pollButton->setVisible(false);
-        box->addWidget(this->ui_.pollButton, 0, Qt::AlignRight);
-
-        this->ui_.predictButton = new LabelButton("Predict", nullptr);
-        this->ui_.predictButton->setVisible(false);
-        box->addWidget(this->ui_.predictButton, 0, Qt::AlignRight);
-
+        // Bottom row: emote button only
         this->ui_.emoteButton = new SvgButton(
             {
                 .dark = ":/buttons/emote.svg",
@@ -1751,29 +1754,34 @@ void SplitInput::updatePollPredictButtons()
     auto *tc = dynamic_cast<TwitchChannel *>(
         this->split_->getChannel().get());
 
+    // Mods can manage (end/lock/resolve) but only broadcaster can create
     const bool hasMod = tc != nullptr && tc->hasModRights();
+    const bool isBroadcaster = tc != nullptr && tc->isBroadcaster();
 
     if (this->ui_.pollButton)
     {
-        this->ui_.pollButton->setVisible(getSettings()->enablePolls && hasMod);
-        if (tc)
-        {
-            auto poll = tc->accessPoll();
-            this->ui_.pollButton->setText(
-                poll->has_value() ? "End Poll" : "Poll");
-        }
+        const bool hasPoll = tc && [tc] {
+            auto p = tc->accessPoll();
+            return p->has_value();
+        }();
+        // Show if: broadcaster (can create or end) OR mod with active poll (can end)
+        this->ui_.pollButton->setVisible(
+            getSettings()->enablePolls &&
+            (isBroadcaster || (hasMod && hasPoll)));
+        this->ui_.pollButton->setText(hasPoll ? "End Poll" : "Poll");
     }
 
     if (this->ui_.predictButton)
     {
+        const bool hasPred = tc && [tc] {
+            auto p = tc->accessPrediction();
+            return p->has_value();
+        }();
+        // Show if: broadcaster (can create or manage) OR mod with active prediction (can manage)
         this->ui_.predictButton->setVisible(
-            getSettings()->enablePredictions && hasMod);
-        if (tc)
-        {
-            auto pred = tc->accessPrediction();
-            this->ui_.predictButton->setText(
-                pred->has_value() ? "Prediction ▾" : "Predict");
-        }
+            getSettings()->enablePredictions &&
+            (isBroadcaster || (hasMod && hasPred)));
+        this->ui_.predictButton->setText(hasPred ? "Prediction ▾" : "Predict");
     }
 }
 
@@ -1884,15 +1892,23 @@ void SplitInput::openPollDialog()
                                  "At least 2 choices are required.");
                              return;
                          }
+                         const auto chanWeak = s->weakFromThis();
+                         dlg->accept();  // close before async call
                          getHelix()->createPoll(
                              s->roomId(), title, choices,
                              std::chrono::seconds(durationSpin->value()),
-                             0, [] {}, [dlg](const QString &err) {
-                                 QMessageBox::warning(
-                                     dlg, "Create Poll",
-                                     "Failed: " + err);
+                             0,
+                             [](const HelixPoll &) {},
+                             [chanWeak](const QString &err) {
+                                 if (auto ch =
+                                         std::dynamic_pointer_cast<TwitchChannel>(
+                                             chanWeak.lock()))
+                                 {
+                                     ch->addSystemMessage(
+                                         QStringLiteral("Failed to create poll: %1")
+                                             .arg(err));
+                                 }
                              });
-                         dlg->accept();
                      });
     QObject::connect(buttons, &QDialogButtonBox::rejected, dlg,
                      &QDialog::reject);
@@ -2014,14 +2030,21 @@ void SplitInput::openPredictionDialog()
             {
                 return;
             }
+            const auto chanWeak = s->weakFromThis();
+            dlg->accept();  // close before async call
             getHelix()->createPrediction(
                 s->roomId(), title, {o1, o2},
                 std::chrono::seconds(durationSpin->value()),
-                [] {}, [dlg](const QString &err) {
-                    QMessageBox::warning(dlg, "Create Prediction",
-                                         "Failed: " + err);
+                [](const HelixPrediction &) {},
+                [chanWeak](const QString &err) {
+                    if (auto ch = std::dynamic_pointer_cast<TwitchChannel>(
+                            chanWeak.lock()))
+                    {
+                        ch->addSystemMessage(
+                            QStringLiteral("Failed to create prediction: %1")
+                                .arg(err));
+                    }
                 });
-            dlg->accept();
         });
     QObject::connect(buttons, &QDialogButtonBox::rejected, dlg,
                      &QDialog::reject);
