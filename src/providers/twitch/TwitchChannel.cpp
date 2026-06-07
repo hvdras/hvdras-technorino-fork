@@ -146,6 +146,7 @@ TwitchChannel::TwitchChannel(const QString &name, bool isWatching)
     this->signalHolder_.managedConnect(
         getApp()->getAccounts()->twitch.currentUserChanged, [this] {
             this->setMod(false);
+            this->setLeadModerator(false);
             this->refreshPubSub();
             this->refreshTwitchChannelEmotes(false);
         });
@@ -914,6 +915,11 @@ bool TwitchChannel::isMod() const
     return this->mod_;
 }
 
+bool TwitchChannel::isLeadModerator() const
+{
+    return this->leadMod_;
+}
+
 bool TwitchChannel::isVip() const
 {
     return this->vip_;
@@ -929,6 +935,16 @@ void TwitchChannel::setMod(bool value)
     if (this->mod_ != value)
     {
         this->mod_ = value;
+
+        this->userStateChanged.invoke();
+    }
+}
+
+void TwitchChannel::setLeadModerator(bool value)
+{
+    if (this->leadMod_ != value)
+    {
+        this->leadMod_ = value;
 
         this->userStateChanged.invoke();
     }

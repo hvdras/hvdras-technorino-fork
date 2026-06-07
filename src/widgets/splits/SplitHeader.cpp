@@ -717,6 +717,25 @@ std::unique_ptr<QMenu> SplitHeader::createMainMenu()
 
             moreMenu->addAction(action);
         }
+
+        {
+            auto *action = new QAction(this);
+            action->setText("Hide /me messages");
+            action->setCheckable(true);
+
+            QObject::connect(
+                moreMenu, &QMenu::aboutToShow, this, [action, this]() {
+                    action->setChecked(
+                        getSettings()->isActionMessagesHiddenChannel(
+                            this->split_->getSelectedChannel()->getName()));
+                });
+            QObject::connect(action, &QAction::triggered, this, [this]() {
+                getSettings()->toggleActionMessagesHiddenChannel(
+                    this->split_->getSelectedChannel()->getName());
+            });
+
+            moreMenu->addAction(action);
+        }
     }
 
     moreMenu->addSeparator();

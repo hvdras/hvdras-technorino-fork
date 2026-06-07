@@ -306,7 +306,9 @@ void TechnorinoPage::initLayout(GeneralPageView &layout)
         ->setToolTip("How pin times are formatted on the banner.");
 
     layout.addTitle("Poll and Prediction");
-    layout.addDescription("Poll, prediction, and banner behavior options.");
+    layout.addDescription(
+        "Poll, prediction, and banner behavior options. Only the "
+        "broadcaster can create polls and predictions.");
     SettingWidget::checkbox("Show predictions",
                             s.enablePredictions)
         ->setTooltip("Show prediction banners above chat.")

@@ -1271,6 +1271,13 @@ FilterSetPtr ChannelView::getFilterSet() const
 
 bool ChannelView::shouldIncludeMessage(const MessagePtr &m) const
 {
+    if (m->flags.has(MessageFlag::Action) && this->underlyingChannel_ &&
+        getSettings()->isActionMessagesHiddenChannel(
+            this->underlyingChannel_->getName()))
+    {
+        return false;
+    }
+
     if (this->channelFilters_)
     {
         if (getSettings()->excludeUserMessagesFromFilter &&

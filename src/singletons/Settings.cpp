@@ -148,6 +148,43 @@ bool Settings::toggleMutedChannel(const QString &channelName)
     }
 }
 
+bool Settings::isActionMessagesHiddenChannel(const QString &channelName)
+{
+    auto items = this->actionMessagesHiddenChannels.readOnly();
+
+    for (const auto &channel : *items)
+    {
+        if (channelName.toLower() == channel.toLower())
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool Settings::toggleActionMessagesHiddenChannel(const QString &channelName)
+{
+    if (this->isActionMessagesHiddenChannel(channelName))
+    {
+        for (std::vector<int>::size_type i = 0;
+             i != this->actionMessagesHiddenChannels.raw().size(); i++)
+        {
+            if (this->actionMessagesHiddenChannels.raw()[i].toLower() ==
+                channelName.toLower())
+            {
+                this->actionMessagesHiddenChannels.removeAt(i);
+                i--;
+            }
+        }
+        return false;
+    }
+    else
+    {
+        this->actionMessagesHiddenChannels.append(channelName);
+        return true;
+    }
+}
+
 Settings *Settings::instance_ = nullptr;
 
 Settings::Settings(const Args &args, const QString &settingsDirectory,
@@ -219,6 +256,9 @@ Settings::Settings(const Args &args, const QString &settingsDirectory,
                            this->ignoredMessages);
     initializeSignalVector(this->signalHolder, this->mutedChannelsSetting,
                            this->mutedChannels);
+    initializeSignalVector(this->signalHolder,
+                           this->actionMessagesHiddenChannelsSetting,
+                           this->actionMessagesHiddenChannels);
     initializeSignalVector(this->signalHolder, this->filterRecordsSetting,
                            this->filterRecords);
     initializeSignalVector(this->signalHolder, this->nicknamesSetting,

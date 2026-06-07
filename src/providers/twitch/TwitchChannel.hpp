@@ -233,6 +233,7 @@ public:
     void sendMessage(const QString &message) override;
     void sendReply(const QString &message, const QString &replyId);
     bool isMod() const override;
+    bool isLeadModerator() const;
     bool isVip() const;
     bool isStaff() const;
     bool isBroadcaster() const override;
@@ -519,6 +520,7 @@ private:
      **/
     bool setLive(bool newLiveStatus);
     void setMod(bool value);
+    void setLeadModerator(bool value);
     void setVIP(bool value);
     void setStaff(bool value);
     void setRoomId(const QString &id);
@@ -615,6 +617,7 @@ private:
         waitingRedemptions_{MAX_QUEUED_REDEMPTIONS};
 
     bool mod_ = false;
+    bool leadMod_ = false;
     bool vip_ = false;
     bool staff_ = false;
     UniqueAccess<QString> roomID_;

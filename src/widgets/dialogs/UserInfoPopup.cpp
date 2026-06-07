@@ -645,7 +645,8 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
                     {
                         visible = true;
                     }
-                    else if (getSettings()->showModActionsOnModUsercardsAsLeadMod)
+                    else if (twitchChannel->isLeadModerator() &&
+                             getSettings()->showModActionsOnModUsercardsAsLeadMod)
                     {
                         visible = true;
                     }

@@ -956,6 +956,8 @@ private:
         "/ignore/phrases"};
     ChatterinoSetting<std::vector<QString>> mutedChannelsSetting = {
         "/pings/muted"};
+    ChatterinoSetting<std::vector<QString>> actionMessagesHiddenChannelsSetting =
+        {"/appearance/messages/hideActionMessagesChannels"};
     ChatterinoSetting<std::vector<FilterRecordPtr>> filterRecordsSetting = {
         "/filtering/filters"};
     ChatterinoSetting<std::vector<Nickname>> nicknamesSetting = {"/nicknames"};
@@ -964,6 +966,7 @@ private:
     ChatterinoSetting<std::vector<ChannelLog>> loggedChannelsSetting = {
         "/logging/channels"};
     SignalVector<QString> mutedChannels;
+    SignalVector<QString> actionMessagesHiddenChannels;
 
 public:
     SignalVector<HighlightPhrase> highlightedMessages;
@@ -980,6 +983,8 @@ public:
     bool isBlacklistedUser(const QString &username);
     bool isMutedChannel(const QString &channelName);
     bool toggleMutedChannel(const QString &channelName);
+    bool isActionMessagesHiddenChannel(const QString &channelName);
+    bool toggleActionMessagesHiddenChannel(const QString &channelName);
     std::optional<QString> matchNickname(const QString &username);
     void mute(const QString &channelName);
     void unmute(const QString &channelName);
