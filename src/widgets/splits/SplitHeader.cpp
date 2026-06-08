@@ -318,12 +318,6 @@ SplitHeader::SplitHeader(Split *split)
     getSettings()->headerStreamTitle.connect(_, this->managedConnections_);
     getSettings()->headerGame.connect(_, this->managedConnections_);
     getSettings()->headerUptime.connect(_, this->managedConnections_);
-    getSettings()->compactHeaders.connect(
-        [this](const auto &, const auto &) {
-            this->updateChannelText();
-            this->updateRoomModes();
-        },
-        this->managedConnections_);
 
     auto *window = dynamic_cast<BaseWindow *>(this->window());
     if (window)
@@ -561,19 +555,6 @@ std::unique_ptr<QMenu> SplitHeader::createMainMenu()
                         Channel::getEmpty());
                 }
             });
-        }
-
-        if (twitchChannel && twitchChannel->hasModRights())
-        {
-            // "Chat modes" sub menu - reuses the same checkable actions as
-            // the mode button's menu, so both stay in sync via updateRoomModes
-            auto *modeMenu = new QMenu("Chat modes", this);
-            modeMenu->addAction(this->modeActionSetEmote);
-            modeMenu->addAction(this->modeActionSetSub);
-            modeMenu->addAction(this->modeActionSetSlow);
-            modeMenu->addAction(this->modeActionSetR9k);
-            modeMenu->addAction(this->modeActionSetFollowers);
-            menu->addMenu(modeMenu);
         }
 
         menu->addSeparator();
@@ -892,9 +873,16 @@ void SplitHeader::updateRoomModes()
         cleanRoomModeText(text, twitchChannel->hasModRights());
 
         // set the label text
-        this->modeButton_->setText(text);
-        this->modeButton_->setVisible(!getSettings()->compactHeaders &&
-                                      !text.isEmpty());
+
+        if (!text.isEmpty())
+        {
+            this->modeButton_->setText(text);
+            this->modeButton_->show();
+        }
+        else
+        {
+            this->modeButton_->hide();
+        }
 
         // Update the mode button menu actions
     }
@@ -905,9 +893,15 @@ void SplitHeader::updateRoomModes()
         QString text = formatRoomModeUnclean(kc->roomModes());
         cleanRoomModeText(text, false);
 
-        this->modeButton_->setText(text);
-        this->modeButton_->setVisible(!getSettings()->compactHeaders &&
-                                      !text.isEmpty());
+        if (!text.isEmpty())
+        {
+            this->modeButton_->setText(text);
+            this->modeButton_->show();
+        }
+        else
+        {
+            this->modeButton_->hide();
+        }
     }
     else
     {
@@ -1086,7 +1080,6 @@ void SplitHeader::updateChannelText()
     }
 
     this->titleLabel_->setText(title.isEmpty() ? "<empty>" : title);
-    this->titleLabel_->setVisible(!getSettings()->compactHeaders);
 }
 
 void SplitHeader::updateIcons()
