@@ -36,6 +36,14 @@ public:
 
     void updateChannelText();
     void updateIcons();
+
+    /// The HTML tooltip describing the split's current channel/stream,
+    /// shared with other widgets that want to preview this split (e.g. tabs)
+    const QString &tooltipText() const
+    {
+        return this->tooltipText_;
+    }
+
     // Invoked when SplitHeader should update anything refering to a TwitchChannel's mode
     // has changed (e.g. sub mode toggled)
     void updateRoomModes();

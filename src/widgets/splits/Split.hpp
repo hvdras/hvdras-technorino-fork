@@ -57,6 +57,7 @@ public:
 
     ChannelView &getChannelView();
     SplitInput &getInput();
+    SplitHeader &getHeader() const;
 
     IndirectChannel getIndirectChannel();
     ChannelPtr getChannel() const;

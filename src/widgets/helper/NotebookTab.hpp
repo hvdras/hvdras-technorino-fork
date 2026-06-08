@@ -8,6 +8,7 @@
 #include "widgets/buttons/Button.hpp"
 #include "widgets/helper/ChannelView.hpp"
 #include "widgets/Notebook.hpp"
+#include "widgets/TooltipWidget.hpp"
 
 #include <pajlada/settings/setting.hpp>
 #include <pajlada/signals/signalholder.hpp>
@@ -169,6 +170,8 @@ private:
 
     bool isLive_{};
     bool isRerun_{};
+
+    TooltipWidget *const tooltipWidget_{};
 
     int growWidth_ = 0;
 

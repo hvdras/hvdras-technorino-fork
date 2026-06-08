@@ -825,6 +825,11 @@ SplitInput &Split::getInput()
     return *this->input_;
 }
 
+SplitHeader &Split::getHeader() const
+{
+    return *this->header_;
+}
+
 void Split::updateInputPlaceholder()
 {
     auto channel = this->getChannel();

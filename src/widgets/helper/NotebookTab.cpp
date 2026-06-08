@@ -20,6 +20,7 @@
 #include "widgets/splits/DraggedSplit.hpp"
 #include "widgets/splits/Split.hpp"
 #include "widgets/splits/SplitContainer.hpp"
+#include "widgets/splits/SplitHeader.hpp"
 
 #include <boost/bind/bind.hpp>
 #include <boost/container_hash/hash.hpp>
@@ -100,12 +101,45 @@ QColor tabHighlightLineColor(QColor color, bool windowFocused)
     return color;
 }
 
+// Picks the split whose stream info should represent this tab in the hover
+// preview. Mirrors SplitContainer::refreshTabLiveStatus: the first live
+// (non-rerun) split wins, falling back to the first rerun split.
+Split *previewSplitFor(QWidget *page)
+{
+    auto *container = dynamic_cast<SplitContainer *>(page);
+    if (!container)
+    {
+        return nullptr;
+    }
+
+    Split *rerunSplit = nullptr;
+    for (auto *split : container->getSplits())
+    {
+        auto channel = split->getChannel();
+        if (channel->isRerun())
+        {
+            if (rerunSplit == nullptr)
+            {
+                rerunSplit = split;
+            }
+            continue;
+        }
+        if (channel->isLive())
+        {
+            return split;
+        }
+    }
+
+    return rerunSplit;
+}
+
 }  // namespace
 
 NotebookTab::NotebookTab(Notebook *notebook)
     : Button(notebook)
     , positionChangedAnimation_(this, "pos")
     , notebook_(notebook)
+    , tooltipWidget_(new TooltipWidget(this))
     , menu_(this)
 {
     this->setContentCacheEnabled(false);
@@ -188,6 +222,19 @@ NotebookTab::NotebookTab(Notebook *notebook)
     this->menu_.addSeparator();
 
     this->notebook_->addNotebookActionsToMenu(&this->menu_);
+
+    if (auto *window = dynamic_cast<BaseWindow *>(this->window()))
+    {
+        // Hack: In some cases Qt doesn't send the leaveEvent the "actual" last mouse receiver.
+        // This can happen when quickly moving the mouse out of the window and right clicking.
+        // To prevent the tooltip from getting stuck, we use the window's leaveEvent.
+        this->managedConnections_.managedConnect(window->leaving, [this] {
+            if (this->tooltipWidget_->isVisible())
+            {
+                this->tooltipWidget_->hide();
+            }
+        });
+    }
 }
 
 void NotebookTab::recreateCloseMultipleTabsMenu(
@@ -1231,6 +1278,35 @@ void NotebookTab::enterEvent(QEnterEvent *event)
 {
     this->mouseOver_ = true;
 
+    if (auto *split = previewSplitFor(this->page))
+    {
+        const auto &tooltipText = split->getHeader().tooltipText();
+        if (!tooltipText.isEmpty())
+        {
+            this->tooltipWidget_->setOne({nullptr, tooltipText});
+            this->tooltipWidget_->setWordWrap(true);
+            this->tooltipWidget_->adjustSize();
+
+            // See SplitHeader::enterEvent for why show() is called before/after
+            // moving depending on platform.
+#ifdef Q_OS_WIN
+            this->tooltipWidget_->show();
+#endif
+
+            auto pos = this->mapToGlobal(this->rect().bottomLeft()) +
+                       QPoint((this->width() - this->tooltipWidget_->width()) /
+                                  2,
+                              1);
+
+            this->tooltipWidget_->moveTo(
+                pos, widgets::BoundsChecking::CursorPosition);
+
+#ifndef Q_OS_WIN
+            this->tooltipWidget_->show();
+#endif
+        }
+    }
+
     this->update();
 
     Button::enterEvent(event);
@@ -1240,6 +1316,8 @@ void NotebookTab::leaveEvent(QEvent *event)
 {
     this->mouseOverX_ = false;
     this->mouseOver_ = false;
+
+    this->tooltipWidget_->hide();
 
     this->update();
 

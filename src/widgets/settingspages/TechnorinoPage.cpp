@@ -8,6 +8,7 @@
 #include "singletons/NativeMessaging.hpp"
 #include "singletons/Paths.hpp"
 #include "singletons/Settings.hpp"
+#include "util/FuzzyConvert.hpp"
 #include "util/Helpers.hpp"
 #include "widgets/BaseWindow.hpp"
 #include "widgets/settingspages/GeneralPageView.hpp"
@@ -195,6 +196,28 @@ void TechnorinoPage::initLayout(GeneralPageView &layout)
                      "This will NOT guarantee exclusion from viewerlists.")
         ->addTo(layout);
 
+    auto addBannerScaleDropdown = [&layout](const QString &label,
+                                            auto &setting,
+                                            const QString &tooltip) {
+        layout.addDropdown<float>(
+                  label,
+                  {"0.5x", "0.6x", "0.75x", "0.9x", "Default", "1.1x",
+                   "1.25x", "1.4x", "1.5x", "1.75x", "2x"},
+                  setting,
+                  [](float val) {
+                      if (val == 1.f)
+                      {
+                          return QString("Default");
+                      }
+                      return QString::number(val) + "x";
+                  },
+                  [](DropdownArgs args) {
+                      return fuzzyToFloat(args.value, 1.f);
+                  },
+                  false)
+            ->setToolTip(tooltip);
+    };
+
     layout.addTitle("Pinned Messages");
     layout.addDescription("Pinned message banner and pin action options.");
     SettingWidget::checkbox("Move Pin actions to Moderate menu",
@@ -241,6 +264,12 @@ void TechnorinoPage::initLayout(GeneralPageView &layout)
                             s.requireAtForPinUserCommand)
         ->setTooltip("Only /pin @username treats the argument as a username.")
         ->addTo(layout);
+    addBannerScaleDropdown("Pinned message scale", s.pinnedMessageScale,
+                           "Make pinned message text larger or smaller.");
+    addBannerScaleDropdown(
+        "Pinned content scale", s.pinnedContentScale,
+        "Make pinned banner controls, labels, and buttons larger or "
+        "smaller.");
     layout.addDropdown<int>(
         "Default pin duration",
         {"Indefinite", "5 minutes", "10 minutes", "20 minutes", "30 minutes"},

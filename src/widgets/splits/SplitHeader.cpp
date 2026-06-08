@@ -318,6 +318,7 @@ SplitHeader::SplitHeader(Split *split)
     getSettings()->headerStreamTitle.connect(_, this->managedConnections_);
     getSettings()->headerGame.connect(_, this->managedConnections_);
     getSettings()->headerUptime.connect(_, this->managedConnections_);
+    getSettings()->compactHeaders.connect(_, this->managedConnections_);
 
     auto *window = dynamic_cast<BaseWindow *>(this->window());
     if (window)
@@ -1080,6 +1081,7 @@ void SplitHeader::updateChannelText()
     }
 
     this->titleLabel_->setText(title.isEmpty() ? "<empty>" : title);
+    this->titleLabel_->setVisible(!getSettings()->compactHeaders);
 }
 
 void SplitHeader::updateIcons()

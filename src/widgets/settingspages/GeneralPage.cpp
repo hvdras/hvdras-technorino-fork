@@ -1062,6 +1062,12 @@ void GeneralPage::initLayout(GeneralPageView &layout)
 
     layout.addTitle("Advanced");
 
+    layout.addSubtitle("Split header");
+    SettingWidget::checkbox("Compact headers", s.compactHeaders)
+        ->setTooltip("Hide the channel name and live status from split "
+                     "headers. Hover over a tab to see its stream info.")
+        ->addTo(layout);
+
     layout.addSubtitle("Chat title");
     layout.addDescription("In live channels show:");
     SettingWidget::checkbox("Uptime", s.headerUptime)
