@@ -47,7 +47,7 @@ constexpr int MAX_PYRAMID_ROW_MESSAGE_LENGTH =
 constexpr int SPAM_FINISH_CHECK_MS = 1000;
 constexpr int SPAM_FINISH_MAX_WAIT_MS = 10000;
 constexpr int MAX_TIMEOUT_SECONDS = 14 * 24 * 60 * 60;
-constexpr int MAX_NUKE_RANGE_SECONDS = 10 * 60;
+constexpr int MIN_NUKE_RANGE_SECONDS = 60;
 constexpr int NUKE_DELETE_INTERVAL_MS = 80;
 constexpr int NUKE_MODERATION_INTERVAL_MS = 150;
 constexpr int NUKE_RATE_LIMIT_BACKOFF_MS = 1200;
@@ -170,6 +170,23 @@ QString formatNukeRange(int seconds)
     }
 
     return QStringLiteral("%1s").arg(seconds);
+}
+
+int maxNukeRange(NukeAction action)
+{
+    switch (action)
+    {
+        case NukeAction::Delete:
+            return std::max(MIN_NUKE_RANGE_SECONDS,
+                            getSettings()->nukeMaxDeleteRangeSeconds.getValue());
+        case NukeAction::Ban:
+            return std::max(MIN_NUKE_RANGE_SECONDS,
+                            getSettings()->nukeMaxBanRangeSeconds.getValue());
+        case NukeAction::Timeout:
+        default:
+            return std::max(MIN_NUKE_RANGE_SECONDS,
+                            getSettings()->nukeMaxTimeoutRangeSeconds.getValue());
+    }
 }
 
 bool isInvisibleCodePoint(uint codePoint)
@@ -649,7 +666,7 @@ ParseResult parseNukeInput(const QString &input, bool allowPartialPreview)
             return std::optional<ParseResult>{};
         }
 
-        preview.rangeSeconds = MAX_NUKE_RANGE_SECONDS;
+        preview.rangeSeconds = maxNukeRange(preview.action);
         preview.complete = true;
         return std::optional<ParseResult>{preview};
     };
@@ -676,7 +693,7 @@ ParseResult parseNukeInput(const QString &input, bool allowPartialPreview)
         {
             return result;
         }
-        result.rangeSeconds = MAX_NUKE_RANGE_SECONDS;
+        result.rangeSeconds = maxNukeRange(result.action);
         result.complete = true;
         return result;
     }
@@ -693,8 +710,10 @@ ParseResult parseNukeInput(const QString &input, bool allowPartialPreview)
     const bool hasCompleteAction = parseActionText(actionText, result);
     const auto range = parseDurationToSeconds(rangeText);
 
+    const auto maxRange = hasCompleteAction ? maxNukeRange(result.action)
+                                            : maxNukeRange(NukeAction::Timeout);
     if (allowPartialPreview && (!hasCompleteAction || range <= 0 ||
-                                range > MAX_NUKE_RANGE_SECONDS))
+                                range > maxRange))
     {
         const auto preview = completeWithDefaultRange(
             words.mid(1, words.size() - 2), words.back());
@@ -716,10 +735,10 @@ ParseResult parseNukeInput(const QString &input, bool allowPartialPreview)
         result.error = QStringLiteral("Invalid /nuke range.");
         return result;
     }
-    if (range > MAX_NUKE_RANGE_SECONDS)
+    if (range > maxRange)
     {
-        result.error =
-            QStringLiteral("/nuke range is limited to 10 minutes.");
+        result.error = QStringLiteral("/nuke range is limited to %1.")
+                           .arg(formatNukeRange(maxRange));
         return result;
     }
     result.rangeSeconds = static_cast<int>(range);

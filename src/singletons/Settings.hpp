@@ -871,6 +871,9 @@ public:
     BoolSetting nukeShowSummary{"/moltorino/moderation/nuke/showSummary", true};
     BoolSetting nukeSkipVips{"/moltorino/moderation/nuke/skipVips", false};
     QStringSetting nukeModerationMessage{"/moltorino/moderation/nuke/moderationMessage", ""};
+    IntSetting nukeMaxDeleteRangeSeconds{"/moltorino/moderation/nuke/maxDeleteRange", 10 * 60};
+    IntSetting nukeMaxBanRangeSeconds{"/moltorino/moderation/nuke/maxBanRange", 6 * 60 * 60};
+    IntSetting nukeMaxTimeoutRangeSeconds{"/moltorino/moderation/nuke/maxTimeoutRange", 3 * 60 * 60};
 
     // -- Translation --
     QStringSetting messageTranslationTargetLanguage{"/moltorino/translation/targetLanguage", "en"};

@@ -447,6 +447,53 @@ void TechnorinoPage::initLayout(GeneralPageView &layout)
         ->setTooltip("Reason sent with timeout or ban actions from /nuke.")
         ->addTo(layout);
 
+    auto addNukeRangeDropdown =
+        [&layout](const QString &label, auto &setting, const QString &tooltip,
+                  const QStringList &options,
+                  const std::vector<int> &values) {
+            layout.addDropdown<int>(
+                label, options, setting,
+                [values, options](int val) {
+                    for (int i = 0; i < (int)values.size(); ++i)
+                    {
+                        if (values[i] == val)
+                            return options[i];
+                    }
+                    return options.last();
+                },
+                [values, options](DropdownArgs args) {
+                    for (int i = 0; i < options.size(); ++i)
+                    {
+                        if (options[i] == args.value)
+                            return values[i];
+                    }
+                    return values.back();
+                },
+                false)
+                ->setToolTip(tooltip);
+        };
+
+    addNukeRangeDropdown(
+        "Delete max range", s.nukeMaxDeleteRangeSeconds,
+        "How far back /nuke delete can scan, and how long it watches for new "
+        "messages.",
+        {"1 min", "2 min", "5 min", "10 min", "30 min", "1 hour"},
+        {60, 120, 300, 600, 1800, 3600});
+    addNukeRangeDropdown(
+        "Timeout max range", s.nukeMaxTimeoutRangeSeconds,
+        "How far back /nuke timeout can scan, and how long it watches for new "
+        "messages.",
+        {"10 min", "30 min", "1 hour", "2 hours", "3 hours", "6 hours",
+         "12 hours"},
+        {600, 1800, 3600, 7200, 10800, 21600, 43200});
+    addNukeRangeDropdown(
+        "Ban max range", s.nukeMaxBanRangeSeconds,
+        "How far back /nuke ban can scan, and how long it watches for new "
+        "messages.",
+        {"10 min", "30 min", "1 hour", "2 hours", "3 hours", "6 hours",
+         "12 hours"},
+        {600, 1800, 3600, 7200, 10800, 21600, 43200});
+
     layout.addTitle("Translation");
     SettingWidget::lineEdit("Default translation target language",
                             s.messageTranslationTargetLanguage, "e.g. en, fr, ja")
