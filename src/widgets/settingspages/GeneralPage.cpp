@@ -1064,8 +1064,10 @@ void GeneralPage::initLayout(GeneralPageView &layout)
 
     layout.addSubtitle("Split header");
     SettingWidget::checkbox("Compact headers", s.compactHeaders)
-        ->setTooltip("Hide the channel name and live status from split "
-                     "headers. Hover over a tab to see its stream info.")
+        ->setTooltip("Hide the channel name and chat mode indicator from "
+                     "split headers. Hover over a tab to see its stream "
+                     "info, and use the \"...\" menu's \"Chat modes\" "
+                     "submenu to toggle chat modes.")
         ->addTo(layout);
 
     layout.addSubtitle("Chat title");
