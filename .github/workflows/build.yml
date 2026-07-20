@@ -310,6 +310,7 @@ jobs:
               -DCMAKE_CXX_COMPILER=clang-cl `
               -DCMAKE_C_COMPILER=clang-cl `
               -DCMAKE_RC_COMPILER=llvm-rc `
+              -DCMAKE_RC_COMPILER_LAUNCHER="" `
               -DCMAKE_LINKER_TYPE=LLD `
               -DCMAKE_BUILD_TYPE=RelWithDebInfo `
               -DCMAKE_TOOLCHAIN_FILE="conan_toolchain.cmake" `
