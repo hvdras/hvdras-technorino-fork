@@ -31,7 +31,6 @@
 #include "widgets/dialogs/SelectChannelFiltersDialog.hpp"
 #include "widgets/dialogs/UserInfoPopup.hpp"
 #include "widgets/helper/ChannelView.hpp"
-#include "widgets/helper/PinnedMessageBanner.hpp"
 #include "widgets/helper/PollBanner.hpp"
 #include "widgets/helper/PredictionBanner.hpp"
 #include "widgets/helper/DebugPopup.hpp"
@@ -42,6 +41,7 @@
 #include "widgets/OverlayWindow.hpp"
 #include "widgets/Scrollbar.hpp"
 #include "widgets/splits/DraggedSplit.hpp"
+#include "widgets/splits/PinnedMessageWidget.hpp"
 #include "widgets/splits/SplitContainer.hpp"
 #include "widgets/splits/SplitHeader.hpp"
 #include "widgets/splits/SplitInput.hpp"
@@ -96,7 +96,7 @@ Split::Split(QWidget *parent)
     , channel_(Channel::getEmpty())
     , vbox_(new QVBoxLayout(this))
     , header_(new SplitHeader(this))
-    , pinnedBanner_(new PinnedMessageBanner(this, this))
+    , pinnedBanner_(new PinnedMessageWidget(this))
     , predictionBanner_(new PredictionBanner(this))
     , pollBanner_(new PollBanner(this))
     , view_(new ChannelView(this, this, ChannelView::Context::None,
@@ -810,6 +810,11 @@ SplitHeader &Split::getHeader() const
     return *this->header_;
 }
 
+PinnedMessageWidget *Split::getPinnedBanner() const
+{
+    return this->pinnedBanner_;
+}
+
 void Split::updateInputPlaceholder()
 {
     auto channel = this->getChannel();
@@ -885,7 +890,7 @@ void Split::refreshModerationMode()
 
 void Split::updateBannerVisibility()
 {
-    const bool hasPin = this->pinnedBanner_->hasPinnedMessage();
+    const bool hasPin = this->pinnedBanner_->hasMessage();
     const bool hasPred = this->predictionBanner_->hasPrediction();
     const bool hasPoll = this->pollBanner_->hasPoll();
     const int mode = getSettings()->bannerStackMode;
@@ -1023,21 +1028,11 @@ void Split::setChannel(IndirectChannel newChannel)
 
     this->view_->setChannel(newChannel.get());
 
-    this->usermodeChangedConnection_.disconnect();
-    this->roomModeChangedConnection_.disconnect();
     this->indirectChannelChangedConnection_.disconnect();
     this->channelSignalHolder_.clear();
 
-    this->pinnedBanner_->setPinnedMessage(std::nullopt, nullptr);
     this->predictionBanner_->setPrediction(std::nullopt);
     this->pollBanner_->setPoll(std::nullopt);
-
-    if (this->pinnedRefreshTimer_)
-    {
-        this->pinnedRefreshTimer_->stop();
-        this->pinnedRefreshTimer_->deleteLater();
-        this->pinnedRefreshTimer_ = nullptr;
-    }
 
     if (this->predictionPollRefreshTimer_)
     {
@@ -1046,8 +1041,7 @@ void Split::setChannel(IndirectChannel newChannel)
         this->predictionPollRefreshTimer_ = nullptr;
     }
 
-    TwitchChannel *tc = dynamic_cast<TwitchChannel *>(newChannel.get().get());
-    auto *kc = dynamic_cast<KickChannel *>(newChannel.get().get());
+    auto *tc = dynamic_cast<TwitchChannel *>(newChannel.get().get());
     auto *mc = dynamic_cast<MultiChannel *>(newChannel.get().get());
 
     if (mc)
@@ -1055,103 +1049,16 @@ void Split::setChannel(IndirectChannel newChannel)
         this->channelSignalHolder_.managedConnect(
             mc->activeChannelChanged, [this] {
                 this->updateInputPlaceholder();
+                this->updateChannelConnections();
             });
     }
-    else if (tc != nullptr)
+    this->updateChannelConnections();
+
+    if (tc != nullptr)
     {
-        this->usermodeChangedConnection_ = tc->userStateChanged.connect([this] {
-            this->header_->updateIcons();
-            this->header_->updateRoomModes();
-        });
-
-        this->roomModeChangedConnection_ = tc->roomModesChanged.connect([this] {
-            this->header_->updateRoomModes();
-        });
-
+        // Update stacking visibility when pin appears/disappears
         this->channelSignalHolder_.managedConnect(
-            tc->sendWaitUpdate, [this](const QString &text) {
-                this->getInput().setSendWaitStatus(text);
-            });
-
-        if (getSettings()->enablePinnedMessages)
-        {
-            auto updatePin = [this, tc] {
-                this->pinnedBanner_->setPinnedMessage(
-                    *tc->accessPinnedMessage(), tc);
-                this->updateBannerVisibility();
-            };
-
-            this->channelSignalHolder_.managedConnect(
-                tc->pinnedMessageChanged, updatePin);
-
-            this->channelSignalHolder_.managedConnect(
-                tc->messageReplaced,
-                [this, tc](size_t, const MessagePtr &,
-                           const MessagePtr &replacement) {
-                    auto pin = tc->accessPinnedMessage();
-                    if (pin->has_value() && !(*pin)->messageId.isEmpty() &&
-                        replacement->id == (*pin)->messageId)
-                    {
-                        this->pinnedBanner_->setPinnedMessage(*pin, tc);
-                    }
-                });
-
-            this->channelSignalHolder_.managedConnect(
-                tc->messageAppended,
-                [this, tc](MessagePtr &msg, std::optional<MessageFlags>) {
-                    auto pin = tc->accessPinnedMessage();
-                    if (pin->has_value() && !(*pin)->authorLogin.isEmpty() &&
-                        msg->loginName.compare((*pin)->authorLogin,
-                                               Qt::CaseInsensitive) == 0)
-                    {
-                        this->pinnedBanner_->refreshLayout();
-                    }
-                });
-
-            // Read cached pin immediately (may be nullopt if not yet fetched)
-            updatePin();
-            // Always kick off a fresh Helix fetch so the banner populates
-            // even if the channel was initialized before this Split connected.
-            tc->refreshPinnedMessage();
-
-            // Poll every 30s so pins/unpins are reflected while watching.
-            this->pinnedRefreshTimer_ = new QTimer(this);
-            this->pinnedRefreshTimer_->setInterval(30000);
-            this->pinnedRefreshTimer_->setTimerType(Qt::VeryCoarseTimer);
-            QObject::connect(this->pinnedRefreshTimer_, &QTimer::timeout,
-                             [tc] {
-                                 tc->refreshPinnedMessage();
-                             });
-            this->pinnedRefreshTimer_->start();
-        }
-        else
-        {
-            this->pinnedBanner_->hide();
-        }
-
-        getSettings()->enablePinnedMessages.connect(
-            [this, tc](const bool &enabled, auto) {
-                if (enabled)
-                {
-                    tc->refreshPinnedMessage();
-                    this->channelSignalHolder_.managedConnect(
-                        tc->pinnedMessageChanged,
-                        [this, tc] {
-                            this->pinnedBanner_->setPinnedMessage(
-                                *tc->accessPinnedMessage(), tc);
-                            this->updateBannerVisibility();
-                        });
-                }
-                else
-                {
-                    this->pinnedBanner_->setPinnedMessage(std::nullopt, tc);
-                    this->pinnedBanner_->hide();
-                }
-            },
-            this->channelSignalHolder_);
-
-        this->channelSignalHolder_.managedConnect(
-            this->pinnedBanner_->dismissed, [this] {
+            tc->pinnedMessageChanged, [this] {
                 this->updateBannerVisibility();
             });
 
@@ -1192,22 +1099,6 @@ void Split::setChannel(IndirectChannel newChannel)
                          });
         this->predictionPollRefreshTimer_->start();
     }
-    else if (kc != nullptr)
-    {
-        this->usermodeChangedConnection_ = kc->userStateChanged.connect([this] {
-            this->header_->updateIcons();
-            this->header_->updateRoomModes();
-        });
-
-        this->roomModeChangedConnection_ = kc->roomModesChanged.connect([this] {
-            this->header_->updateRoomModes();
-        });
-
-        this->channelSignalHolder_.managedConnect(
-            kc->sendWaitUpdate, [this](const QString &text) {
-                this->getInput().setSendWaitStatus(text);
-            });
-    }
 
     this->indirectChannelChangedConnection_ =
         newChannel.getChannelChanged().connect([this] {
@@ -1245,6 +1136,68 @@ void Split::setChannel(IndirectChannel newChannel)
 
     // Queue up save because: Split channel changed
     getApp()->getWindows()->queueSave();
+}
+
+void Split::updateChannelConnections()
+{
+    this->usermodeChangedConnection_.disconnect();
+    this->roomModeChangedConnection_.disconnect();
+    this->sendWaitConnection_ = pajlada::Signals::ScopedConnection{};
+    this->sharedChatConnection_ = pajlada::Signals::ScopedConnection{};
+    this->getInput().setSendWaitStatus({});
+
+    auto *channel = this->channel_.get().get();
+    auto *mc = dynamic_cast<MultiChannel *>(channel);
+    if (mc)
+    {
+        channel = mc->activeChannel()->channel.get();
+    }
+
+    auto *tc = dynamic_cast<TwitchChannel *>(channel);
+    auto *kc = dynamic_cast<KickChannel *>(channel);
+    if (tc)
+    {
+        this->usermodeChangedConnection_ = tc->userStateChanged.connect([this] {
+            this->header_->updateIcons();
+            this->header_->updateRoomModes();
+        });
+
+        this->roomModeChangedConnection_ = tc->roomModesChanged.connect([this] {
+            this->header_->updateRoomModes();
+        });
+
+        this->sendWaitConnection_ =
+            tc->sendWaitUpdate.connect([this](const QString &text) {
+                this->getInput().setSendWaitStatus(text);
+            });
+
+        this->sharedChatConnection_ = tc->sharedChatStatusChanged.connect(
+            [this](const std::vector<HelixMinimalUser> &) {
+                this->header_->updateChannelText();
+            });
+        this->pinnedBanner_->setChannel(tc);
+    }
+    else if (kc != nullptr)
+    {
+        this->usermodeChangedConnection_ = kc->userStateChanged.connect([this] {
+            this->header_->updateIcons();
+            this->header_->updateRoomModes();
+        });
+
+        this->roomModeChangedConnection_ = kc->roomModesChanged.connect([this] {
+            this->header_->updateRoomModes();
+        });
+
+        this->sendWaitConnection_ =
+            kc->sendWaitUpdate.connect([this](const QString &text) {
+                this->getInput().setSendWaitStatus(text);
+            });
+        this->pinnedBanner_->setChannel(nullptr);
+    }
+    else
+    {
+        this->pinnedBanner_->setChannel(nullptr);
+    }
 }
 
 void Split::setModerationMode(bool value)
@@ -1644,6 +1597,11 @@ void Split::showSearch(bool singleChannel)
 void Split::reconnect()
 {
     this->getChannel()->reconnect();
+}
+
+void Split::togglePinnedBanner()
+{
+    this->pinnedBanner_->toggleUserPinned();
 }
 
 void Split::dragEnterEvent(QDragEnterEvent *event)

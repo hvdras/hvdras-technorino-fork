@@ -123,6 +123,7 @@ TwitchChannel::TwitchChannel(const QString &name, bool isWatching)
     , bttvEmotes_(std::make_shared<EmoteMap>())
     , ffzEmotes_(std::make_shared<EmoteMap>())
     , seventvEmotes_(std::make_shared<EmoteMap>())
+    , nextSharedChatSessionProbe_(QDateTime::currentDateTime())
 {
     qCDebug(chatterinoTwitch) << "[TwitchChannel" << name << "] Opened";
 
@@ -182,6 +183,11 @@ TwitchChannel::TwitchChannel(const QString &name, bool isWatching)
         this->cleanUpReplyThreads();
     });
     this->threadClearTimer_.start(5 * 60 * 1000);
+
+    QObject::connect(&this->nextSharedChatSessionUpdateTimer_, &QTimer::timeout,
+                     &this->lifetimeGuard_, [this] {
+                         this->refreshSharedChatSessionState();
+                     });
 
     this->signalHolder_.managedConnect(
         getApp()->getAccounts()->twitch.emotesReloaded,
@@ -775,6 +781,7 @@ void TwitchChannel::roomIdChanged()
     this->joinBttvChannel();
     this->listenSevenTVCosmetics();
     getApp()->getTwitchLiveController()->add(this->sharedFromThis());
+    this->refreshPinnedMessage();
 }
 
 QString TwitchChannel::prepareMessage(const QString &message) const
@@ -933,6 +940,12 @@ void TwitchChannel::setMod(bool value)
         this->mod_ = value;
 
         this->userStateChanged.invoke();
+
+        if (value)
+        {
+            // Gained mod privileges - fetch the current pin
+            this->refreshPinnedMessage();
+        }
     }
 }
 
@@ -1580,6 +1593,7 @@ void TwitchChannel::refreshPubSub()
     auto currentAccount = getApp()->getAccounts()->twitch.getCurrent();
 
     getApp()->getTwitchPubSub()->listenToChannelPointRewards(roomId);
+    getApp()->getTwitchPubSub()->listenToPinnedChatUpdates(roomId);
 
     if (currentAccount->isAnon())
     {
@@ -2541,77 +2555,232 @@ bool TwitchChannel::isLoadingRecentMessages() const
     return this->loadingRecentMessages_.test();
 }
 
-SharedAccessGuard<const std::optional<TwitchChannel::PinnedMessage>>
-    TwitchChannel::accessPinnedMessage() const
+const std::vector<HelixMinimalUser> &
+    TwitchChannel::getSharedChatSessionParticipants() const
 {
-    return this->currentPin_.accessConst();
+    return this->sharedChatSessionParticipants_;
 }
 
-void TwitchChannel::setPinnedMessage(std::optional<PinnedMessage> pin)
+void TwitchChannel::probeSharedChatSession()
 {
+    auto now = QDateTime::currentDateTime();
+
+    if (!this->nextSharedChatSessionUpdateTimer_.isActive() &&
+        now >= this->nextSharedChatSessionProbe_)
     {
-        auto locked = this->currentPin_.access();
-        if (!locked->has_value() && !pin.has_value())
-        {
-            return;
-        }
-        *locked = std::move(pin);
+        this->nextSharedChatSessionProbe_ = now.addSecs(30);
+        this->refreshSharedChatSessionState();
     }
-    this->pinnedMessageChanged.invoke();
+}
+
+void TwitchChannel::refreshSharedChatSessionState()
+{
+    getHelix()->getSharedChatSession(
+        this->roomId(),
+        [this,
+         weak = this->weakFromThis()](const HelixSharedChatSession &session) {
+            const auto self = weak.lock();
+            if (!self)
+            {
+                return;
+            }
+
+            auto intervalSecs = std::clamp(
+                getSettings()->sharedChatSessionRefreshInterval.getValue(), 5,
+                999);
+            this->nextSharedChatSessionUpdateTimer_.setInterval(intervalSecs *
+                                                                1000);
+
+            if (session.participantIds.empty())
+            {
+                // Allow immediate re-probe
+                this->nextSharedChatSessionProbe_ =
+                    QDateTime::currentDateTime();
+                this->nextSharedChatSessionUpdateTimer_.stop();
+
+                this->sharedChatSessionParticipants_.clear();
+                this->sharedChatSessionParticipantIds_.clear();
+
+                this->sharedChatStatusChanged.invoke({});
+
+                return;
+            }
+
+            bool participantsDiffer =
+                session.participantIds.size() - 1 !=
+                this->sharedChatSessionParticipantIds_.size();
+            if (!participantsDiffer)
+            {
+                for (const auto &broadcasterID : session.participantIds)
+                {
+                    if (this->roomId() == broadcasterID)
+                    {
+                        continue;
+                    }
+
+                    if (!this->sharedChatSessionParticipantIds_.contains(
+                            broadcasterID))
+                    {
+                        participantsDiffer = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!participantsDiffer)
+            {
+                return;
+            }
+
+            getHelix()->fetchUsers(
+                session.participantIds, {},
+                [this, weak = this->weakFromThis()](const auto &users) {
+                    const auto self = weak.lock();
+                    if (!self)
+                    {
+                        return;
+                    }
+
+                    this->sharedChatSessionParticipants_.clear();
+                    this->sharedChatSessionParticipantIds_.clear();
+
+                    for (const auto &user : users)
+                    {
+                        if (user.id != this->roomId())
+                        {
+                            this->sharedChatSessionParticipantIds_.insert(
+                                user.id);
+                            this->sharedChatSessionParticipants_.push_back(
+                                {user.id, user.login, user.displayName});
+                        }
+                    }
+
+                    this->nextSharedChatSessionUpdateTimer_.start();
+
+                    this->sharedChatStatusChanged.invoke(
+                        this->sharedChatSessionParticipants_);
+                },
+                [] {
+                    qCWarning(chatterinoTwitch) << "Failed to get user info";
+                });
+        },
+        [](HelixGetSharedChatSessionError error, const QString &message) {
+            QString errorMessage = "Failed to get shared chat session state: ";
+
+            switch (error)
+            {
+                case HelixGetSharedChatSessionError::InvalidBroadcasterId: {
+                    errorMessage += "Invalid broadcaster ID";
+                }
+                break;
+
+                case HelixGetSharedChatSessionError::UserMissingScope: {
+                    errorMessage +=
+                        "Missing required scope. Re-login with your "
+                        "account and try again.";
+                }
+                break;
+
+                case HelixGetSharedChatSessionError::UserNotAuthorized: {
+                    errorMessage +=
+                        "you don't have permission to perform that action.";
+                }
+                break;
+
+                case HelixGetSharedChatSessionError::Unknown: {
+                    errorMessage += "Unknown error";
+                }
+                break;
+
+                case HelixGetSharedChatSessionError::Forwarded: {
+                    errorMessage += message;
+                }
+                break;
+            }
+
+            qCWarning(chatterinoTwitch) << errorMessage;
+        });
 }
 
 void TwitchChannel::refreshPinnedMessage()
 {
-    if (!getSettings()->enablePinnedMessages || this->roomId().isEmpty())
+    auto currentAccount = getApp()->getAccounts()->twitch.getCurrent();
+    if (!currentAccount || currentAccount->isAnon())
     {
         return;
     }
 
-    auto account = getApp()->getAccounts()->twitch.getCurrent();
-    if (!account || account->isAnon())
-    {
-        return;
-    }
-
-    const auto weak = this->weak_from_this();
+    const auto requestId = ++this->pinnedMessageRequestId_;
     getHelix()->getPinnedChatMessage(
-        this->roomId(), account->getUserId(),
-        [weak](const std::optional<HelixPinnedChatMessage> &result) {
-            auto shared =
-                std::dynamic_pointer_cast<TwitchChannel>(weak.lock());
-            if (!shared)
+        this->roomId(), currentAccount->getUserId(),
+        [weak = this->weakFromThis(),
+         requestId](std::optional<HelixPinnedChatMessage> msg) {
+            auto self = weak.lock();
+            if (!self || self->pinnedMessageRequestId_ != requestId)
             {
                 return;
             }
-
-            if (!result)
+            if (msg)
             {
-                shared->setPinnedMessage(std::nullopt);
-                return;
+                self->pinnedMessage_ =
+                    std::make_unique<const HelixPinnedChatMessage>(
+                        std::move(*msg));
             }
-
-            PinnedMessage pin;
-            pin.messageId = result->messageID;
-            pin.text = result->messageText;
-            pin.authorId = result->sender.id;
-            pin.authorLogin = result->sender.login;
-            pin.authorName = result->sender.displayName;
-            pin.pinnerLogin = result->pinnedBy.login;
-            pin.pinnerName = result->pinnedBy.displayName;
-            pin.pinnedAt = result->startsAt;
-            pin.endsAt = result->endsAt;
-            shared->setPinnedMessage(std::move(pin));
+            else
+            {
+                self->pinnedMessage_ = nullptr;
+            }
+            self->pinnedMessageChanged.invoke();
         },
-        [weak](const QString &error) {
-            auto shared =
-                std::dynamic_pointer_cast<TwitchChannel>(weak.lock());
-            if (!shared)
+        [](const QString &error) {
+            qCWarning(chatterinoTwitch)
+                << "Failed to fetch pinned message:" << error;
+        });
+}
+
+const HelixPinnedChatMessage *TwitchChannel::getPinnedMessage() const
+{
+    return this->pinnedMessage_.get();
+}
+
+void TwitchChannel::clearPinnedMessage()
+{
+    if (!this->pinnedMessage_)
+    {
+        return;
+    }
+    this->pinnedMessage_.reset();
+    this->pinnedMessageChanged.invoke();
+}
+
+void TwitchChannel::unpinCurrentMessage()
+{
+    if (!this->pinnedMessage_)
+    {
+        return;
+    }
+
+    auto currentAccount = getApp()->getAccounts()->twitch.getCurrent();
+    if (!currentAccount || currentAccount->isAnon())
+    {
+        return;
+    }
+
+    const auto msgId = this->pinnedMessage_->messageID;
+    getHelix()->unpinChatMessage(
+        this->roomId(), currentAccount->getUserId(), msgId,
+        [weak = this->weakFromThis()] {
+            auto self = weak.lock();
+            if (!self)
             {
                 return;
             }
-            qCDebug(chatterinoTwitch)
-                << "Failed to fetch pinned message for" << shared->getName()
-                << ":" << error;
+            self->pinnedMessage_.reset();
+            self->pinnedMessageChanged.invoke();
+        },
+        [](HelixUnpinMessageError /*error*/, const QString &message) {
+            qCWarning(chatterinoTwitch)
+                << "Failed to unpin message:" << message;
         });
 }
 
@@ -2744,128 +2913,6 @@ void TwitchChannel::refreshActivePoll()
             shared->setActivePoll(std::move(active));
         },
         [](const QString &) {});
-}
-
-void TwitchChannel::handlePinnedChatUpdate(const QJsonObject &data)
-{
-    const QString type = data.value("type").toString();
-    const auto innerDataValue = data.value("data");
-    const auto innerData =
-        innerDataValue.isObject() ? innerDataValue.toObject() : QJsonObject{};
-
-    if (type == QStringLiteral("pin-message") ||
-        type == QStringLiteral("update-message"))
-    {
-        PinnedMessage pin;
-
-        if (innerData.contains("id"))
-        {
-            pin.pinId = innerData["id"].toString();
-        }
-
-        const auto msgObj = innerData.value("message").toObject();
-        if (!msgObj.isEmpty())
-        {
-            pin.messageId = msgObj["id"].toString();
-
-            const auto contentObj = msgObj.value("content").toObject();
-            if (!contentObj.isEmpty())
-            {
-                pin.text = contentObj["text"].toString();
-            }
-
-            const auto senderObj = msgObj.value("sender").toObject();
-            if (!senderObj.isEmpty())
-            {
-                pin.authorId = senderObj["user_id"].toString();
-                pin.authorLogin = senderObj["login"].toString();
-                pin.authorName = senderObj.contains("display_name")
-                                     ? senderObj["display_name"].toString()
-                                     : pin.authorLogin;
-            }
-        }
-
-        if (const auto pinnedByObj = innerData.value("pinned_by").toObject();
-            !pinnedByObj.isEmpty())
-        {
-            pin.pinnerLogin = pinnedByObj["login"].toString();
-            pin.pinnerName = pinnedByObj.contains("display_name")
-                                 ? pinnedByObj["display_name"].toString()
-                                 : pin.pinnerLogin;
-        }
-
-        if (innerData.contains("ends_at"))
-        {
-            pin.endsAt = QDateTime::fromString(
-                innerData["ends_at"].toString(), Qt::ISODate);
-        }
-        if (innerData.contains("starts_at"))
-        {
-            pin.pinnedAt = QDateTime::fromString(
-                innerData["starts_at"].toString(), Qt::ISODate);
-        }
-
-        // Fill in author details from channel message snapshot if available
-        if (!pin.messageId.isEmpty())
-        {
-            const auto snapshot = this->getMessageSnapshot();
-            for (const auto &msg : snapshot)
-            {
-                if (msg && msg->id == pin.messageId)
-                {
-                    if (pin.authorId.isEmpty())
-                    {
-                        pin.authorId = msg->userID;
-                    }
-                    if (pin.authorLogin.isEmpty())
-                    {
-                        pin.authorLogin = msg->loginName;
-                    }
-                    if (pin.authorName.isEmpty())
-                    {
-                        pin.authorName = msg->displayName.isEmpty()
-                                             ? msg->loginName
-                                             : msg->displayName;
-                    }
-                    if (pin.text.isEmpty())
-                    {
-                        pin.text = msg->messageText;
-                    }
-                    break;
-                }
-            }
-        }
-
-        this->setPinnedMessage(std::move(pin));
-    }
-    else if (type == QStringLiteral("unpin-message"))
-    {
-        if (getSettings()->showUnpinNotifications)
-        {
-            QString unpinnerName;
-            if (const auto unpinnedBy =
-                    innerData.value("unpinned_by").toObject();
-                !unpinnedBy.isEmpty())
-            {
-                unpinnerName = unpinnedBy["display_name"].toString();
-                if (unpinnerName.isEmpty())
-                {
-                    unpinnerName = unpinnedBy["login"].toString();
-                }
-            }
-
-            if (unpinnerName.isEmpty())
-            {
-                this->addSystemMessage("Pinned message was removed.");
-            }
-            else
-            {
-                this->addSystemMessage(
-                    QString("%1 unpinned the message.").arg(unpinnerName));
-            }
-        }
-        this->setPinnedMessage(std::nullopt);
-    }
 }
 
 }  // namespace chatterino
