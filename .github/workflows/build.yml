@@ -272,12 +272,6 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Install Clang (Windows)
-        uses: Nerixyz/install-llvm-action@4af87402e075801cb1ba829dcee5bfafdc733616
-        if: startsWith(matrix.os, 'windows')
-        with:
-          version: 22
-
       - name: Install and Setup Conan (Windows)
         if: startsWith(matrix.os, 'windows')
         run: |
@@ -289,7 +283,6 @@ jobs:
       - name: Install dependencies (Windows)
         if: startsWith(matrix.os, 'windows')
         run: |
-          unset CMAKE_RC_COMPILER_LAUNCHER || true
           mkdir build
           cd build
           conan install .. \
@@ -305,14 +298,9 @@ jobs:
         if: startsWith(matrix.os, 'windows')
         shell: pwsh
         run: |
-          Remove-Item Env:CMAKE_RC_COMPILER_LAUNCHER -ErrorAction SilentlyContinue
           cd build
           cmake `
               -G Ninja `
-              -DCMAKE_CXX_COMPILER=clang-cl `
-              -DCMAKE_C_COMPILER=clang-cl `
-              -DCMAKE_RC_COMPILER=llvm-rc `
-              -DCMAKE_LINKER_TYPE=LLD `
               -DCMAKE_BUILD_TYPE=RelWithDebInfo `
               -DCMAKE_TOOLCHAIN_FILE="conan_toolchain.cmake" `
               -DUSE_PRECOMPILED_HEADERS=ON `
