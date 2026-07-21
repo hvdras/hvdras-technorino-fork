@@ -272,6 +272,12 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Install Clang (Windows)
+        uses: Nerixyz/install-llvm-action@4af87402e075801cb1ba829dcee5bfafdc733616
+        if: startsWith(matrix.os, 'windows')
+        with:
+          version: 22
+
       - name: Install and Setup Conan (Windows)
         if: startsWith(matrix.os, 'windows')
         run: |
@@ -301,6 +307,10 @@ jobs:
           cd build
           cmake `
               -G Ninja `
+              -DCMAKE_CXX_COMPILER=clang-cl `
+              -DCMAKE_C_COMPILER=clang-cl `
+              -DCMAKE_RC_COMPILER=llvm-rc `
+              -DCMAKE_LINKER_TYPE=LLD `
               -DCMAKE_BUILD_TYPE=RelWithDebInfo `
               -DCMAKE_TOOLCHAIN_FILE="conan_toolchain.cmake" `
               -DUSE_PRECOMPILED_HEADERS=ON `
@@ -313,6 +323,15 @@ jobs:
               -DFORCE_JSON_GENERATION=Off `
               -DCHATTERINO_SPELLCHECK=On `
               ..
+          # ccache wraps cmake_llvm_rc with a @responsefile that cmake_llvm_rc
+          # cannot parse; strip ccache from those rules after configure.
+          Get-ChildItem -Recurse -Filter "*.ninja" | ForEach-Object {
+            $c = [System.IO.File]::ReadAllText($_.FullName)
+            if ($c -match 'cmake_llvm_rc') {
+              $c = [regex]::Replace($c, 'ccache (".*?cmake\.exe")', '$1')
+              [System.IO.File]::WriteAllText($_.FullName, $c)
+            }
+          }
           ninja
 
       - name: Build crashpad (Windows)
