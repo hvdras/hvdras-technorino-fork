@@ -324,12 +324,15 @@ jobs:
               -DCHATTERINO_SPELLCHECK=On `
               ..
           # ccache wraps cmake_llvm_rc with a @responsefile that cmake_llvm_rc
-          # cannot parse; strip ccache from those rules after configure.
+          # cannot parse. Strip the word 'ccache' from every ninja rule line
+          # that contains cmake_llvm_rc, regardless of path quoting style.
           Get-ChildItem -Recurse -Filter "*.ninja" | ForEach-Object {
-            $c = [System.IO.File]::ReadAllText($_.FullName)
-            if ($c -match 'cmake_llvm_rc') {
-              $c = [regex]::Replace($c, 'ccache (".*?cmake\.exe")', '$1')
-              [System.IO.File]::WriteAllText($_.FullName, $c)
+            $f = $_.FullName
+            $lines = Get-Content $f
+            if ($lines -match 'cmake_llvm_rc') {
+              ($lines | ForEach-Object {
+                if ($_ -match 'cmake_llvm_rc') { $_ -replace '\bccache\b\s+', '' } else { $_ }
+              }) | Set-Content $f
             }
           }
           ninja
