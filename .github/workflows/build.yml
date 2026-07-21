@@ -324,6 +324,7 @@ jobs:
               -DFORCE_JSON_GENERATION=Off `
               -DCHATTERINO_SPELLCHECK=On `
               ..
+          $env:CCACHE_DISABLE = "1"
           ninja
 
       - name: Build crashpad (Windows)
