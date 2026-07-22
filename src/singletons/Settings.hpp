@@ -847,14 +847,7 @@ public:
 
     // -- Pinned Messages --
     BoolSetting enablePinnedMessages{"/moltorino/pinnedMessages/enabled", true};
-    BoolSetting alwaysExpandPinnedMessages{"/moltorino/pinnedMessages/alwaysExpand", false};
-    FloatSetting pinnedMessageScale{"/moltorino/pinnedMessages/scale", 1.f};
-    FloatSetting pinnedContentScale{"/moltorino/pinnedMessages/contentScale", 1.f};
     BoolSetting showUnpinNotifications{"/moltorino/pinnedMessages/showUnpinNotifications", true};
-    IntSetting pinCloseButtonAction{"/moltorino/pinnedMessages/closeButtonAction", 0};
-    IntSetting pinTimerDisplay{"/moltorino/pinnedMessages/timerDisplay", 0};
-    QStringSetting pinTimestampFormat{"/moltorino/pinnedMessages/timestampFormat", "Relative"};
-    QStringSetting pinBannerBackgroundColor{"/moltorino/pinnedMessages/customBackgroundColor", ""};
     BoolSetting movePinToModerateMenu{"/moltorino/pinnedMessages/movePinToModerateMenu", false};
     IntSetting showPinButtonOnModeratorsMode{"/moltorino/pinnedMessages/showPinButtonOnModeratorsMode", 1};
     BoolSetting enablePinCommandMessages{"/moltorino/pinnedMessages/enablePinCommandMessages", true};

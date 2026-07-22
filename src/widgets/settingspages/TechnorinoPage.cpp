@@ -248,10 +248,6 @@ void TechnorinoPage::initLayout(GeneralPageView &layout)
                             s.enablePinnedMessages)
         ->setTooltip("Show the pinned message banner above chat.")
         ->addTo(layout);
-    SettingWidget::checkbox("Always expand long pinned messages",
-                            s.alwaysExpandPinnedMessages)
-        ->setTooltip("Automatically expand the full content of long pins.")
-        ->addTo(layout);
     SettingWidget::checkbox("Enable /pin <message text>",
                             s.enablePinCommandMessages)
         ->setTooltip("Let /pin followed by text send that message and pin it.")
@@ -264,12 +260,6 @@ void TechnorinoPage::initLayout(GeneralPageView &layout)
                             s.requireAtForPinUserCommand)
         ->setTooltip("Only /pin @username treats the argument as a username.")
         ->addTo(layout);
-    addBannerScaleDropdown("Pinned message scale", s.pinnedMessageScale,
-                           "Make pinned message text larger or smaller.");
-    addBannerScaleDropdown(
-        "Pinned content scale", s.pinnedContentScale,
-        "Make pinned banner controls, labels, and buttons larger or "
-        "smaller.");
     layout.addDropdown<int>(
         "Default pin duration",
         {"Indefinite", "5 minutes", "10 minutes", "20 minutes", "30 minutes"},
@@ -288,51 +278,6 @@ void TechnorinoPage::initLayout(GeneralPageView &layout)
                             s.showUnpinNotifications)
         ->setTooltip("Show a system message when someone unpins a message.")
         ->addTo(layout);
-    layout.addDropdown<int>(
-        "Close button action",
-        {"Hide banner here", "Unpin for everyone"},
-        s.pinCloseButtonAction,
-        [](int val) {
-            return val == 1 ? QString("Unpin for everyone")
-                            : QString("Hide banner here");
-        },
-        [](DropdownArgs args) {
-            return args.value.startsWith("Unpin") ? 1 : 0;
-        },
-        false)
-        ->setToolTip("What the X button on the pin banner does.");
-    layout.addDropdown<int>(
-        "Timer display",
-        {"Time + Countdown", "Time only", "Countdown only", "Hover only",
-         "Hidden"},
-        s.pinTimerDisplay,
-        [](int val) {
-            switch (val)
-            {
-                case 1: return QString("Time only");
-                case 2: return QString("Countdown only");
-                case 3: return QString("Hover only");
-                case 4: return QString("Hidden");
-                default: return QString("Time + Countdown");
-            }
-        },
-        [](DropdownArgs args) {
-            if (args.value == "Time only") return 1;
-            if (args.value == "Countdown only") return 2;
-            if (args.value == "Hover only") return 3;
-            if (args.value == "Hidden") return 4;
-            return 0;
-        },
-        false)
-        ->setToolTip("How pin time is shown on the banner.");
-    layout.addDropdown<QString>(
-        "Pin timestamp format",
-        {"Relative", "h:mm", "hh:mm", "h:mm a", "hh:mm a"},
-        s.pinTimestampFormat,
-        [](QString val) { return val; },
-        [](DropdownArgs args) { return args.value; },
-        false)
-        ->setToolTip("How pin times are formatted on the banner.");
 
     layout.addTitle("Poll and Prediction");
     layout.addDescription(
