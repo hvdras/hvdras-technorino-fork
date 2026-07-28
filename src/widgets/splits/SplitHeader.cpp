@@ -1030,8 +1030,14 @@ void SplitHeader::updatePinButton()
     auto *twitchChannel = dynamic_cast<TwitchChannel *>(channel.get());
     const bool hasPinnedMessage = twitchChannel != nullptr &&
                                   twitchChannel->getPinnedMessage() != nullptr;
+    const int pinButtonMode = getSettings()->showPinButtonOnModeratorsMode;
+    const bool showPinButton =
+        hasPinnedMessage &&
+        (pinButtonMode == 2 ||
+         (pinButtonMode == 1 && twitchChannel != nullptr &&
+          twitchChannel->hasModRights()));
 
-    this->pinButton_->setVisible(hasPinnedMessage);
+    this->pinButton_->setVisible(showPinButton);
     if (hasPinnedMessage && this->split_->getPinnedBanner()->isVisible())
     {
         this->pinButton_->setColor(this->theme->accent);

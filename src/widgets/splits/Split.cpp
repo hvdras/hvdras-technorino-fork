@@ -902,7 +902,8 @@ void Split::updateBannerVisibility()
     if (activeCount <= 1 || mode == 0)
     {
         // Show all active banners
-        this->pinnedBanner_->setVisible(hasPin);
+        this->pinnedBanner_->setVisible(hasPin &&
+                                        getSettings()->enablePinnedMessages);
         this->predictionBanner_->setVisible(hasPred);
         this->pollBanner_->setVisible(hasPoll);
         return;
@@ -942,7 +943,7 @@ void Split::updateBannerVisibility()
         }
     }
 
-    this->pinnedBanner_->setVisible(showPin);
+    this->pinnedBanner_->setVisible(showPin && getSettings()->enablePinnedMessages);
     this->predictionBanner_->setVisible(showPred);
     this->pollBanner_->setVisible(showPoll);
 }

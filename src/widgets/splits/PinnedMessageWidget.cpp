@@ -145,7 +145,7 @@ PinnedMessageWidget::PinnedMessageWidget(QWidget *parent)
             this->scaleChangedEvent(this->scale());
             this->updateGeometry();
         },
-        this->signalHolder_);
+        this->managedConnections_);
 
     this->scaleChangedEvent(this->scale());
     this->hide();

@@ -3022,8 +3022,11 @@ void ChannelView::addMessageContextMenuItems(QMenu *menu,
         auto *twitchChannel = dynamic_cast<TwitchChannel *>(chan.get());
         if (twitchChannel)
         {
-            auto *pinAction = moderateMenu->addAction("&Pin");
-            auto *pinMenu = new QMenu(moderateMenu);
+            auto *pinTarget = getSettings()->movePinToModerateMenu
+                                  ? moderateMenu
+                                  : menu;
+            auto *pinAction = pinTarget->addAction("&Pin");
+            auto *pinMenu = new QMenu(pinTarget);
             pinAction->setMenu(pinMenu);
             auto pinFor = [&](std::optional<std::chrono::seconds> dur) {
                 return [twitchChannel, id = layout->getMessage()->id, dur,
@@ -3042,7 +3045,7 @@ void ChannelView::addMessageContextMenuItems(QMenu *menu,
             pinMenu->addAction("&30 minutes", this,
                                pinFor(std::chrono::minutes(30)));
 
-            moderateMenu->addAction(
+            pinTarget->addAction(
                 "&Unpin", this, [twitchChannel, id = layout->getMessage()->id] {
                     twitchChannel->unpinMessageAs(
                         id, *getApp()->getAccounts()->twitch.getCurrent());

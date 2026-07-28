@@ -254,14 +254,6 @@ void TechnorinoPage::initLayout(GeneralPageView &layout)
                             s.enablePinCommandMessages)
         ->setTooltip("Let /pin followed by text send that message and pin it.")
         ->addTo(layout);
-    SettingWidget::checkbox("Enable /pin <username>",
-                            s.enablePinUserCommand)
-        ->setTooltip("Let /pin followed by a username pin that user's latest message.")
-        ->addTo(layout);
-    SettingWidget::checkbox("Require @ for /pin <username>",
-                            s.requireAtForPinUserCommand)
-        ->setTooltip("Only /pin @username treats the argument as a username.")
-        ->addTo(layout);
     layout.addDropdown<int>(
         "Default pin duration",
         {"Indefinite", "5 minutes", "10 minutes", "20 minutes", "30 minutes"},

@@ -12,6 +12,7 @@
 #include "providers/twitch/api/Helix.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
+#include "singletons/Settings.hpp"
 #include "util/Expected.hpp"
 #include "util/Helpers.hpp"
 
@@ -168,7 +169,11 @@ ExpectedStr<Action> parseAction(const CommandContext &ctx)
 
     if (!duration && !isExplicitUntilEnd)
     {
-        duration = SEND_CHAT_MESSAGE_PIN_DURATION;
+        const int secs = getSettings()->defaultPinDuration;
+        if (secs > 0)
+            duration.emplace(std::chrono::seconds(secs));
+        else
+            duration = SEND_CHAT_MESSAGE_PIN_DURATION;
     }
 
     return Action{
@@ -273,6 +278,12 @@ QString pin(const CommandContext &ctx)
         return {};
     }
 
+    if (!getSettings()->enablePinCommandMessages)
+    {
+        ctx.channel->addSystemMessage(
+            u"Sending pinned messages via /pin is disabled in settings."_s);
+        return {};
+    }
     sendPinnedMessage(chan, currentUser, action->text, action->duration);
     return {};
 }

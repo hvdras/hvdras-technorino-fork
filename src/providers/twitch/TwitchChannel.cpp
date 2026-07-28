@@ -2294,7 +2294,8 @@ void TwitchChannel::unpinMessageAs(const QString &messageID,
                 return;
             }
 
-            chan->addSystemMessage("Unpinned message.");
+            if (getSettings()->showUnpinNotifications)
+                chan->addSystemMessage("Unpinned message.");
         },
         [weak = this->weakFromThis(), messageID](HelixUnpinMessageError error,
                                                  auto message) {

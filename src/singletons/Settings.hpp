@@ -852,8 +852,6 @@ public:
     BoolSetting movePinToModerateMenu{"/moltorino/pinnedMessages/movePinToModerateMenu", false};
     IntSetting showPinButtonOnModeratorsMode{"/moltorino/pinnedMessages/showPinButtonOnModeratorsMode", 1};
     BoolSetting enablePinCommandMessages{"/moltorino/pinnedMessages/enablePinCommandMessages", true};
-    BoolSetting enablePinUserCommand{"/moltorino/pinnedMessages/enablePinUserCommand", true};
-    BoolSetting requireAtForPinUserCommand{"/moltorino/pinnedMessages/requireAtForPinUserCommand", false};
     IntSetting defaultPinDuration{"/moltorino/pinnedMessages/defaultDuration", -1};
 
     // -- Poll and Prediction --
