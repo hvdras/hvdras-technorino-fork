@@ -248,6 +248,8 @@ void TechnorinoPage::initLayout(GeneralPageView &layout)
                             s.enablePinnedMessages)
         ->setTooltip("Show the pinned message banner above chat.")
         ->addTo(layout);
+    addBannerScaleDropdown("Pinned message scale", s.pinnedMessageScale,
+                           "Make the pinned message banner larger or smaller.");
     SettingWidget::checkbox("Enable /pin <message text>",
                             s.enablePinCommandMessages)
         ->setTooltip("Let /pin followed by text send that message and pin it.")

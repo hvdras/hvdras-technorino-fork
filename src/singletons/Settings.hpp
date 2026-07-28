@@ -847,6 +847,7 @@ public:
 
     // -- Pinned Messages --
     BoolSetting enablePinnedMessages{"/moltorino/pinnedMessages/enabled", true};
+    FloatSetting pinnedMessageScale{"/moltorino/pinnedMessages/scale", 1.f};
     BoolSetting showUnpinNotifications{"/moltorino/pinnedMessages/showUnpinNotifications", true};
     BoolSetting movePinToModerateMenu{"/moltorino/pinnedMessages/movePinToModerateMenu", false};
     IntSetting showPinButtonOnModeratorsMode{"/moltorino/pinnedMessages/showPinButtonOnModeratorsMode", 1};

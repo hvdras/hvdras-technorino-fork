@@ -140,6 +140,13 @@ PinnedMessageWidget::PinnedMessageWidget(QWidget *parent)
         }
     });
 
+    getSettings()->pinnedMessageScale.connect(
+        [this](const float &, auto) {
+            this->scaleChangedEvent(this->scale());
+            this->updateGeometry();
+        },
+        this->signalHolder_);
+
     this->scaleChangedEvent(this->scale());
     this->hide();
 }
@@ -401,19 +408,22 @@ void PinnedMessageWidget::hideEvent(QHideEvent *event)
 
 void PinnedMessageWidget::scaleChangedEvent(float newScale)
 {
+    const float s = newScale * std::clamp(float(getSettings()->pinnedMessageScale),
+                                          0.5F, 2.0F);
+
     QFont headerFont = this->pinnedByLabel_->font();
-    headerFont.setPointSizeF(9.5F * newScale);
+    headerFont.setPointSizeF(9.5F * s);
     this->pinnedByLabel_->setFont(headerFont);
     this->countdownLabel_->setFont(headerFont);
 
     QFont bodyFont = this->messageLabel_->font();
-    bodyFont.setPointSizeF(11.0F * newScale);
+    bodyFont.setPointSizeF(11.0F * s);
     this->messageLabel_->setFont(bodyFont);
-    this->messageMaxHeight_ = int(110 * newScale);
+    this->messageMaxHeight_ = int(110 * s);
     this->updateMessageHeight();
 
     QFont footerFont = this->footerLabel_->font();
-    footerFont.setPointSizeF(9.0F * newScale);
+    footerFont.setPointSizeF(9.0F * s);
     this->footerLabel_->setFont(footerFont);
 }
 
