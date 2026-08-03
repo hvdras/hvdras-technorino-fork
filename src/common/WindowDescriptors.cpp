@@ -9,6 +9,7 @@
 #include "debug/AssertInGuiThread.hpp"
 #include "providers/kick/KickChatServer.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
+#include "providers/youtube/YouTubeChatServer.hpp"
 #include "util/MultiChannel.hpp"
 #include "util/QMagicEnum.hpp"
 #include "widgets/Window.hpp"
@@ -151,6 +152,9 @@ IndirectChannel SplitDescriptor::decodeChannel() const
                                         .userID = this->kickUserID,
                                         .channelID = this->kickChannelID,
                                     });
+        case Channel::Type::YouTube:
+            return getApp()->getYouTubeChatServer()->getOrCreate(
+                this->channelName_);
         case Channel::Type::Multi: {
             QVarLengthArray<MultiChannel::Spec, 4> specs;
             for (const auto &child : this->children)

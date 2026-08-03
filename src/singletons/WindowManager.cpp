@@ -764,6 +764,9 @@ void WindowManager::encodeChannel(IndirectChannel channel, QJsonObject &obj)
             }
         }
         break;
+        case Channel::Type::YouTube:
+            obj.insert("name", channel.get()->getName());
+            break;
         case Channel::Type::Multi: {
             auto *mc = dynamic_cast<MultiChannel *>(channel.get().get());
             if (mc)

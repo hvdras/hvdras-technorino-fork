@@ -8,6 +8,7 @@
 #include "controllers/hotkeys/HotkeyController.hpp"
 #include "providers/kick/KickChatServer.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
+#include "providers/youtube/YouTubeChatServer.hpp"
 #include "singletons/Fonts.hpp"
 #include "singletons/Theme.hpp"
 #include "util/MultiChannel.hpp"
@@ -314,6 +315,29 @@ SelectChannelDialog::SelectChannelDialog(QWidget *parent)
 
         ui.notebook->addPage(ui.kickPage, "Kick");
     }
+    // YouTube
+    {
+        ui.youtubePage = new QWidget;
+        auto *layout = new QVBoxLayout(ui.youtubePage);
+
+        auto *label = new QLabel(
+            "View YouTube live chat (read-only, no API key required).<br>"
+            "Enter a <b>video ID</b> (e.g. <i>dQw4w9WgXcQ</i> from the URL)<br>"
+            "or a <b>channel handle</b> (e.g. <i>@cinnabrit</i>) to auto-join "
+            "their live stream.");
+        label->setWordWrap(true);
+        label->setOpenExternalLinks(false);
+        layout->addWidget(label);
+
+        ui.youtubeVideoId = new QLineEdit();
+        ui.youtubeVideoId->setPlaceholderText(
+            "Video ID (e.g. dQw4w9WgXcQ) or @channelHandle");
+        layout->addWidget(ui.youtubeVideoId);
+
+        layout->addStretch(1);
+
+        ui.notebook->addPage(ui.youtubePage, "YouTube");
+    }
     // Multi
     {
         ui.multiPage = new QWidget;
@@ -457,6 +481,12 @@ void SelectChannelDialog::setSelectedChannel(
             this->ui_.notebook->select(this->ui_.kickPage);
         }
         break;
+        case Channel::Type::YouTube: {
+            this->ui_.youtubeVideoId->setText(channel->getName());
+            this->ui_.youtubeVideoId->selectAll();
+            this->ui_.notebook->select(this->ui_.youtubePage);
+        }
+        break;
         case Channel::Type::Multi: {
             const auto *mc = dynamic_cast<const MultiChannel *>(channel.get());
             if (mc)
@@ -495,6 +525,12 @@ IndirectChannel SelectChannelDialog::getSelectedChannel() const
     {
         return getApp()->getKickChatServer()->getOrCreate(
             this->ui_.kickName->text().trimmed());
+    }
+
+    if (this->ui_.notebook->isSelected(this->ui_.youtubePage))
+    {
+        return getApp()->getYouTubeChatServer()->getOrCreate(
+            this->ui_.youtubeVideoId->text().trimmed());
     }
 
     if (this->ui_.notebook->isSelected(this->ui_.multiPage))

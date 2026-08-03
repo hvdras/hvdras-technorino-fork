@@ -59,6 +59,7 @@ public:
         /// TwitchEnd
         TwitchEnd,
         Kick,
+        YouTube,
         /// Misc
         Misc,
         Multi,

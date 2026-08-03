@@ -315,6 +315,14 @@ public:
         return nullptr;
     }
 
+    YouTubeChatServer *getYouTubeChatServer() override
+    {
+        assert(false &&
+               "EmptyApplication::getYouTubeChatServer was called without "
+               "being initialized");
+        return nullptr;
+    }
+
     RepeatedMessageDetector *getRepeatedMessageDetector() override
     {
         return nullptr;

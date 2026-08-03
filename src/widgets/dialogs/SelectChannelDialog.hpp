@@ -92,6 +92,9 @@ private:
 
         QLineEdit *kickName;
 
+        QLineEdit *youtubeVideoId;
+        QWidget *youtubePage;
+
         QListWidget *multiView;
         QComboBox *multiIndicatorMode;
 

@@ -69,6 +69,7 @@ class IController;
 class SpellChecker;
 
 class KickChatServer;
+class YouTubeChatServer;
 class RepeatedMessageDetector;
 
 class IApplication
@@ -129,6 +130,7 @@ public:
     virtual eventsub::IController *getEventSub() = 0;
     virtual SpellChecker *getSpellChecker() = 0;
     virtual KickChatServer *getKickChatServer() = 0;
+    virtual YouTubeChatServer *getYouTubeChatServer() = 0;
     virtual RepeatedMessageDetector *getRepeatedMessageDetector() = 0;
 
     int monoFontId;
@@ -204,6 +206,7 @@ private:
     std::unique_ptr<pronouns::Pronouns> pronouns;
     std::unique_ptr<SpellChecker> spellChecker;
     std::unique_ptr<KickChatServer> kickChatServer;
+    std::unique_ptr<YouTubeChatServer> youtubeChatServer;
     std::unique_ptr<RepeatedMessageDetector> repeatedMessageDetector;
 #ifdef CHATTERINO_HAVE_PLUGINS
     std::unique_ptr<PluginController> plugins;
@@ -263,6 +266,7 @@ public:
     ITwitchUsers *getTwitchUsers() override;
     SpellChecker *getSpellChecker() override;
     KickChatServer *getKickChatServer() override;
+    YouTubeChatServer *getYouTubeChatServer() override;
     RepeatedMessageDetector *getRepeatedMessageDetector() override;
 
 private:

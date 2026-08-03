@@ -21,6 +21,7 @@
 #include "providers/bttv/BttvEmotes.hpp"
 #include "providers/ffz/FfzEmotes.hpp"
 #include "providers/kick/KickChatServer.hpp"
+#include "providers/youtube/YouTubeChatServer.hpp"
 #include "providers/repetitions/RepeatedMessageDetector.hpp"
 #include "providers/links/LinkResolver.hpp"
 #include "providers/pronouns/Pronouns.hpp"
@@ -203,6 +204,7 @@ Application::Application(Settings &_settings, const Paths &paths,
     , pronouns(new pronouns::Pronouns)
     , spellChecker(new SpellChecker)
     , kickChatServer(new KickChatServer)
+    , youtubeChatServer(new YouTubeChatServer)
     , repeatedMessageDetector(new RepeatedMessageDetector)
 #ifdef CHATTERINO_HAVE_PLUGINS
     , plugins(new PluginController(paths))
@@ -647,6 +649,14 @@ KickChatServer *Application::getKickChatServer()
     assert(this->kickChatServer);
 
     return this->kickChatServer.get();
+}
+
+YouTubeChatServer *Application::getYouTubeChatServer()
+{
+    assertInGuiThread();
+    assert(this->youtubeChatServer);
+
+    return this->youtubeChatServer.get();
 }
 
 RepeatedMessageDetector *Application::getRepeatedMessageDetector()
