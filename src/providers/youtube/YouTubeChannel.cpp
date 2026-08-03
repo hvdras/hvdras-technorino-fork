@@ -119,6 +119,59 @@ QString extractInitialContinuation(const QJsonObject &root)
     return {};
 }
 
+/// Extract the Innertube API key embedded in the page HTML.
+QString extractApiKey(const QByteArray &body)
+{
+    static const QByteArray MARKER = "\"INNERTUBE_API_KEY\":\"";
+    auto idx = body.indexOf(MARKER);
+    if (idx == -1)
+    {
+        return {};
+    }
+    idx += static_cast<int>(MARKER.size());
+    const auto end = body.indexOf('"', idx);
+    if (end == -1)
+    {
+        return {};
+    }
+    return QString::fromUtf8(body.mid(idx, end - idx));
+}
+
+/// Parse ytInitialData JSON from page HTML.
+/// Returns the JSON document, or null if not found / parse failed.
+QJsonDocument extractYtInitialData(const QByteArray &body)
+{
+    static const QByteArray MARKER1 = "var ytInitialData = ";
+    static const QByteArray MARKER2 = "ytInitialData = ";
+
+    int idx = body.indexOf(MARKER1);
+    if (idx != -1)
+    {
+        idx += static_cast<int>(MARKER1.size());
+    }
+    else
+    {
+        idx = body.indexOf(MARKER2);
+        if (idx == -1)
+        {
+            return {};
+        }
+        idx += static_cast<int>(MARKER2.size());
+    }
+
+    auto endIdx = body.indexOf(";</script>", idx);
+    if (endIdx == -1)
+    {
+        endIdx = body.indexOf(';', idx);
+    }
+    if (endIdx == -1)
+    {
+        return {};
+    }
+
+    return QJsonDocument::fromJson(body.mid(idx, endIdx - idx));
+}
+
 /// Extract text from a YouTube "runs" array (list of text/emoji run objects).
 QString runsToText(const QJsonArray &runs)
 {
@@ -215,11 +268,8 @@ bool YouTubeChannel::isLive() const
 void YouTubeChannel::fetchChannelLivePage(const QString &handle)
 {
     auto weak = this->weak_from_this();
-    // Strip leading @ if present (already checked above, but be safe)
-    auto cleanHandle = handle.startsWith(u'@') ? handle : u'@' + handle;
 
-    NetworkRequest(
-        u"https://www.youtube.com/%1/live"_s.arg(cleanHandle))
+    NetworkRequest(u"https://www.youtube.com/%1/live"_s.arg(handle))
         .header("User-Agent", USER_AGENT)
         .header("Accept-Language", "en-US,en;q=0.9")
         .followRedirects(true)
@@ -235,61 +285,24 @@ void YouTubeChannel::fetchChannelLivePage(const QString &handle)
 
             // Extract video ID from the live page
             static const QByteArray VIDEO_ID_MARKER = "\"videoId\":\"";
-            auto idx = body.indexOf(VIDEO_ID_MARKER);
-            if (idx != -1)
+            auto vidIdx = body.indexOf(VIDEO_ID_MARKER);
+            if (vidIdx != -1)
             {
-                idx += static_cast<int>(VIDEO_ID_MARKER.size());
-                auto endIdx = body.indexOf('"', idx);
-                if (endIdx != -1 && endIdx - idx == 11)
+                vidIdx += static_cast<int>(VIDEO_ID_MARKER.size());
+                auto vidEnd = body.indexOf('"', vidIdx);
+                if (vidEnd != -1 && vidEnd - vidIdx == 11)
                 {
-                    self->videoId_ =
-                        QString::fromUtf8(body.mid(idx, 11));
+                    self->videoId_ = QString::fromUtf8(body.mid(vidIdx, 11));
                 }
             }
 
-            // Proceed with the live page as if it were a watch page
-            // (ytInitialData structure is the same)
-            static const QByteArray MARKER = "var ytInitialData = ";
-            auto dataIdx = body.indexOf(MARKER);
-            if (dataIdx == -1)
-            {
-                static const QByteArray MARKER2 = "ytInitialData = ";
-                dataIdx = body.indexOf(MARKER2);
-                if (dataIdx == -1)
-                {
-                    self->addSystemMessage(
-                        u"YouTube: Channel is not live."_s);
-                    return;
-                }
-                dataIdx += static_cast<int>(MARKER2.size());
-            }
-            else
-            {
-                dataIdx += static_cast<int>(MARKER.size());
-            }
+            self->apiKey_ = extractApiKey(body);
 
-            auto endIdx2 = body.indexOf(";</script>", dataIdx);
-            if (endIdx2 == -1)
-            {
-                endIdx2 = body.indexOf(';', dataIdx);
-            }
-            if (endIdx2 == -1)
-            {
-                self->addSystemMessage(
-                    u"YouTube: Failed to parse channel page."_s);
-                return;
-            }
-
-            QJsonParseError parseError;
-            auto doc = QJsonDocument::fromJson(
-                body.mid(dataIdx, endIdx2 - dataIdx), &parseError);
+            const auto doc = extractYtInitialData(body);
             if (doc.isNull())
             {
-                qCWarning(chatterinoYoutube)
-                    << "Failed to parse channel live page:"
-                    << parseError.errorString();
                 self->addSystemMessage(
-                    u"YouTube: Failed to parse channel page."_s);
+                    u"YouTube: Channel is not live."_s);
                 return;
             }
 
@@ -340,52 +353,13 @@ void YouTubeChannel::fetchWatchPage()
 
             const auto &body = result.getData();
 
-            // Find ytInitialData assignment in the page HTML
-            static const QByteArray MARKER = "var ytInitialData = ";
-            auto idx = body.indexOf(MARKER);
-            if (idx == -1)
-            {
-                // Some pages use ytInitialData without "var"
-                static const QByteArray MARKER2 = "ytInitialData = ";
-                idx = body.indexOf(MARKER2);
-                if (idx == -1)
-                {
-                    self->addSystemMessage(
-                        u"YouTube: No live chat data found. Is this an active live stream?"_s);
-                    return;
-                }
-                idx += static_cast<int>(MARKER2.size());
-            }
-            else
-            {
-                idx += static_cast<int>(MARKER.size());
-            }
+            self->apiKey_ = extractApiKey(body);
 
-            // The JSON ends at ";</script>" – find the nearest semicolon
-            // after the opening brace to avoid capturing too much
-            auto endIdx = body.indexOf(";</script>", idx);
-            if (endIdx == -1)
-            {
-                // Fallback: look for plain semicolon
-                endIdx = body.indexOf(';', idx);
-            }
-            if (endIdx == -1)
-            {
-                self->addSystemMessage(
-                    u"YouTube: Failed to parse page data."_s);
-                return;
-            }
-
-            const QByteArray jsonBytes = body.mid(idx, endIdx - idx);
-            QJsonParseError parseError;
-            auto doc = QJsonDocument::fromJson(jsonBytes, &parseError);
+            const auto doc = extractYtInitialData(body);
             if (doc.isNull())
             {
-                qCWarning(chatterinoYoutube)
-                    << "Failed to parse ytInitialData:"
-                    << parseError.errorString();
                 self->addSystemMessage(
-                    u"YouTube: Failed to parse page data."_s);
+                    u"YouTube: No live chat data found. Is this an active live stream?"_s);
                 return;
             }
 
@@ -442,17 +416,27 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
         {"continuation", continuation},
     };
 
+    // YouTube requires the API key as a query parameter to return JSON.
+    // The key is extracted from the watch page; fall back to the known
+    // public key if extraction failed.
+    const auto key = this->apiKey_.isEmpty()
+                         ? u"AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"_s
+                         : this->apiKey_;
+
+    const auto url =
+        u"https://www.youtube.com/youtubei/v1/live_chat/get_live_chat?key=%1"_s
+            .arg(key);
     const auto referer =
         u"https://www.youtube.com/watch?v=%1"_s.arg(this->videoId_);
 
-    NetworkRequest(
-        u"https://www.youtube.com/youtubei/v1/live_chat/get_live_chat"_s,
-        NetworkRequestType::Post)
+    NetworkRequest(url, NetworkRequestType::Post)
         .json(requestBody)
         .header("User-Agent", USER_AGENT)
         .header("Accept-Language", "en-US,en;q=0.9")
         .header("Origin", "https://www.youtube.com")
         .header("Referer", referer)
+        .header("X-YouTube-Client-Name", "1")
+        .header("X-YouTube-Client-Version", "2.20240101.00.00")
         .onSuccess([weak](const NetworkResult &result) {
             auto self =
                 std::static_pointer_cast<YouTubeChannel>(weak.lock());
@@ -465,7 +449,10 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
             if (root.isEmpty())
             {
                 qCWarning(chatterinoYoutube)
-                    << "Empty response from live chat API";
+                    << "Empty/invalid JSON from live chat API (status"
+                    << result.status().value_or(0) << ")";
+                self->addSystemMessage(
+                    u"YouTube: Chat API returned an invalid response. Retrying..."_s);
                 QTimer::singleShot(ERROR_RETRY_MS, [weak] {
                     auto self =
                         std::static_pointer_cast<YouTubeChannel>(weak.lock());

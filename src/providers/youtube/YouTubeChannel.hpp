@@ -34,6 +34,7 @@ private:
     void scheduleNextPoll(const QString &continuation, int timeoutMs);
 
     QString videoId_;
+    QString apiKey_;
     bool live_ = false;
 
     pajlada::Signals::SignalHolder signalHolder_;
