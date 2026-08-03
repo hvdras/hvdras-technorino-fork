@@ -252,6 +252,8 @@ constexpr magic_enum::customize::customize_t
             return "misc";
         case Type::Kick:
             return "kick";
+        case Type::YouTube:
+            return "youtube";
         case Type::Multi:
             return "multi";
 

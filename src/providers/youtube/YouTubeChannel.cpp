@@ -151,22 +151,47 @@ QString runsToText(const QJsonArray &runs)
 
 }  // namespace
 
+namespace {
+
+// A YouTube video ID is exactly 11 characters from [A-Za-z0-9_-].
+bool looksLikeVideoId(const QString &s)
+{
+    if (s.size() != 11)
+    {
+        return false;
+    }
+    for (const QChar ch : s)
+    {
+        if (!ch.isLetterOrNumber() && ch != u'_' && ch != u'-')
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+}  // namespace
+
 YouTubeChannel::YouTubeChannel(const QString &nameOrHandle)
     : Channel(nameOrHandle, Type::YouTube)
     , videoId_(nameOrHandle)
 {
-    if (nameOrHandle.startsWith(u'@'))
-    {
-        this->addSystemMessage(
-            u"YouTube: Looking up live stream for %1..."_s.arg(nameOrHandle));
-        this->fetchChannelLivePage(nameOrHandle);
-    }
-    else
+    if (looksLikeVideoId(nameOrHandle))
     {
         this->addSystemMessage(
             u"YouTube: Connecting to live chat for video %1..."_s.arg(
                 nameOrHandle));
         this->fetchWatchPage();
+    }
+    else
+    {
+        // Treat as channel handle — ensure it has the @ prefix
+        const auto handle = nameOrHandle.startsWith(u'@')
+                                ? nameOrHandle
+                                : u'@' + nameOrHandle;
+        this->addSystemMessage(
+            u"YouTube: Looking up live stream for %1..."_s.arg(handle));
+        this->fetchChannelLivePage(handle);
     }
 }
 
