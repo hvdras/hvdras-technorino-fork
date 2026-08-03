@@ -419,7 +419,7 @@ void PinnedMessageWidget::refresh()
         }
     }
 
-    this->messageText_->setHtmlContent(html);
+    static_cast<PinnedTextBrowser *>(this->messageText_)->setHtmlContent(html);
     this->updateMessageHeight();
 
     {
