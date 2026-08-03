@@ -775,7 +775,7 @@ struct HelixPinnedChatMessage {
         const auto fragsArr =
             data["message"].toObject()["fragments"].toArray();
         this->fragments.reserve(fragsArr.size());
-        for (const auto &val : fragsArr)
+        for (const auto val : fragsArr)
         {
             const auto obj = val.toObject();
             const auto typeStr = obj["type"].toString();
