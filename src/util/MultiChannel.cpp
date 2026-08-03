@@ -5,6 +5,7 @@
 #include "messages/Message.hpp"
 #include "providers/kick/KickChatServer.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
+#include "providers/youtube/YouTubeChatServer.hpp"
 #include "util/QCompareTransparent.hpp"
 #include "util/QMagicEnum.hpp"
 
@@ -77,6 +78,8 @@ ChannelPtr resolveChannel(const MultiChannel::Spec &spec)
             return getApp()->getTwitch()->getOrAddChannel(spec.name);
         case MultiChannel::Platform::Kick:
             return getApp()->getKickChatServer()->getOrCreate(spec.name);
+        case MultiChannel::Platform::YouTube:
+            return getApp()->getYouTubeChatServer()->getOrCreate(spec.name);
     }
     return Channel::getEmpty();
 }
@@ -377,6 +380,8 @@ bool platformMatches(MessagePlatform lhs, MultiChannel::Platform rhs) noexcept
         case MessagePlatform::Kick:
             return rhs == MultiChannel::Platform::Kick;
     }
+    // YouTube messages use AnyOrTwitch as platform; they won't match YouTube
+    // slots here, which is acceptable since YouTube has no badge indicator.
     return false;
 }
 

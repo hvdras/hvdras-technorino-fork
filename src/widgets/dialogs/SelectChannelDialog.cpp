@@ -58,10 +58,29 @@ public:
             "Twitch", QVariant::fromValue(MultiChannel::Platform::Twitch));
         this->platform->addItem(
             "Kick", QVariant::fromValue(MultiChannel::Platform::Kick));
+        this->platform->addItem(
+            "YouTube", QVariant::fromValue(MultiChannel::Platform::YouTube));
         layout->addWidget(this->platform);
 
         this->name->setPlaceholderText("Name");
         layout->addWidget(this->name);
+
+        QObject::connect(
+            this->platform,
+            QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            [this](int) {
+                auto p = this->platform->currentData()
+                             .value<MultiChannel::Platform>();
+                if (p == MultiChannel::Platform::YouTube)
+                {
+                    this->name->setPlaceholderText(
+                        "Video ID or @channelHandle");
+                }
+                else
+                {
+                    this->name->setPlaceholderText("Name");
+                }
+            });
 
         auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok |
                                              QDialogButtonBox::Cancel);

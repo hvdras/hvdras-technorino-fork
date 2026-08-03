@@ -19,6 +19,7 @@ public:
     enum class Platform : uint8_t {
         Twitch,
         Kick,
+        YouTube,
     };
 
     struct Spec {
