@@ -13,7 +13,7 @@
 #include <memory>
 
 class QLabel;
-class QScrollArea;
+class QTextBrowser;
 class QMenu;
 
 namespace chatterino {
@@ -77,8 +77,7 @@ private:
     DrawnButton *menuButton_ = nullptr;
 
     // Body
-    QScrollArea *messageScrollArea_ = nullptr;
-    QLabel *messageLabel_ = nullptr;
+    QTextBrowser *messageText_ = nullptr;
     QLabel *footerLabel_ = nullptr;
 
     QTimer *progressTimer_ = nullptr;

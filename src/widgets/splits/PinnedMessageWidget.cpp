@@ -5,6 +5,8 @@
 #include "widgets/splits/PinnedMessageWidget.hpp"
 
 #include "Application.hpp"
+#include "common/network/NetworkRequest.hpp"
+#include "common/network/NetworkResult.hpp"
 #include "controllers/accounts/AccountController.hpp"
 #include "providers/twitch/api/Helix.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
@@ -13,13 +15,18 @@
 #include "singletons/Theme.hpp"
 #include "widgets/buttons/DrawnButton.hpp"
 
+#include <QDesktopServices>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMenu>
 #include <QPainter>
 #include <QPaintEvent>
-#include <QScrollArea>
+#include <QPixmap>
+#include <QPointer>
+#include <QRegularExpression>
+#include <QSet>
 #include <QShowEvent>
+#include <QTextBrowser>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -29,6 +36,82 @@ using namespace Qt::Literals;
 #include <chrono>
 #include <memory>
 #include <optional>
+
+// QTextBrowser subclass that async-loads emote images and detects URLs.
+// Defined outside the chatterino namespace so it doesn't need Q_OBJECT.
+class PinnedTextBrowser : public QTextBrowser
+{
+public:
+    explicit PinnedTextBrowser(QWidget *parent = nullptr)
+        : QTextBrowser(parent)
+    {
+        this->setOpenLinks(false);
+        this->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        this->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+        this->setFrameShape(QFrame::NoFrame);
+        this->setFocusPolicy(Qt::NoFocus);
+        this->setStyleSheet(
+            "QTextBrowser { background: transparent; border: none; } "
+            "QTextBrowser > QWidget > QWidget { background: transparent; }");
+        this->viewport()->setAutoFillBackground(false);
+        this->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        this->document()->setDocumentMargin(2);
+        this->document()->setDefaultStyleSheet(
+            "a { color: #7fc0e0; text-decoration: none; }");
+    }
+
+    void setHtmlContent(const QString &html)
+    {
+        this->html_ = html;
+        this->setHtml(html);
+    }
+
+    // Async image loading: returns cached pixmap immediately, or fires a
+    // network request and re-sets the HTML when the image arrives.
+    QVariant loadResource(int type, const QUrl &name) override
+    {
+        if (type != QTextDocument::ImageResource)
+        {
+            return QTextBrowser::loadResource(type, name);
+        }
+        const auto key = name.toString();
+
+        auto it = this->images_.find(key);
+        if (it != this->images_.end())
+        {
+            return it.value();
+        }
+
+        if (this->fetching_.contains(key))
+        {
+            return {};
+        }
+        this->fetching_.insert(key);
+
+        QPointer<PinnedTextBrowser> self(this);
+        chatterino::NetworkRequest(key)
+            .onSuccess([self, key](const chatterino::NetworkResult &result) {
+                if (!self)
+                {
+                    return;
+                }
+                QPixmap px;
+                if (px.loadFromData(result.getData()) && !px.isNull())
+                {
+                    self->images_[key] = px;
+                    self->setHtml(self->html_);
+                }
+            })
+            .execute();
+
+        return {};
+    }
+
+private:
+    QString html_;
+    QHash<QString, QPixmap> images_;
+    QSet<QString> fetching_;
+};
 
 namespace chatterino {
 
@@ -43,8 +126,7 @@ PinnedMessageWidget::PinnedMessageWidget(QWidget *parent)
     , pinnedByLabel_(new QLabel(this))
     , countdownLabel_(new QLabel(this))
     , menuButton_(new DrawnButton(DrawnButton::Symbol::Kebab, {}, this))
-    , messageScrollArea_(new QScrollArea(this))
-    , messageLabel_(new QLabel(this))
+    , messageText_(new PinnedTextBrowser(this))
     , footerLabel_(new QLabel(this))
     , progressTimer_(new QTimer(this))
     , autoHideTimer_(new QTimer(this))
@@ -73,29 +155,13 @@ PinnedMessageWidget::PinnedMessageWidget(QWidget *parent)
 
     contentBox->addLayout(headerRow);
 
-    // Message body
-    this->messageLabel_->setWordWrap(true);
-    this->messageLabel_->setTextFormat(Qt::PlainText);
-    this->messageLabel_->setAlignment(Qt::AlignTop | Qt::AlignLeft);
-    this->messageLabel_->setStyleSheet("background: transparent;");
-    this->messageLabel_->setSizePolicy(QSizePolicy::Expanding,
-                                       QSizePolicy::Preferred);
-    this->messageLabel_->setTextInteractionFlags(Qt::TextSelectableByMouse);
-
-    this->messageScrollArea_->setWidgetResizable(true);
-    this->messageScrollArea_->setHorizontalScrollBarPolicy(
-        Qt::ScrollBarAlwaysOff);
-    this->messageScrollArea_->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    this->messageScrollArea_->setFrameShape(QFrame::NoFrame);
-    this->messageScrollArea_->setFocusPolicy(Qt::NoFocus);
-    this->messageScrollArea_->setStyleSheet(
-        "QScrollArea { background: transparent; } "
-        "QScrollArea > QWidget > QWidget { background: transparent; }");
-    this->messageScrollArea_->viewport()->setAutoFillBackground(false);
-    this->messageScrollArea_->setSizePolicy(QSizePolicy::Expanding,
-                                            QSizePolicy::Fixed);
-    this->messageScrollArea_->setWidget(this->messageLabel_);
-    contentBox->addWidget(this->messageScrollArea_);
+    // Message body — QTextBrowser renders rich text with clickable links and
+    // async-loaded emote images.
+    QObject::connect(this->messageText_, &QTextBrowser::anchorClicked,
+                     [](const QUrl &url) {
+                         QDesktopServices::openUrl(url);
+                     });
+    contentBox->addWidget(this->messageText_);
 
     // Footer: [sender · time] ... [countdown]
     auto *footerRow = new QHBoxLayout();
@@ -300,7 +366,60 @@ void PinnedMessageWidget::refresh()
     this->pinnedByLabel_->setText(u"Pinned by <b>%1</b>"_s.arg(
         pin->pinnedBy.formatted(mode).toHtmlEscaped()));
 
-    this->messageLabel_->setText(pin->messageText);
+    // Build rich-text HTML from message fragments so that URLs become
+    // clickable links and Twitch native emotes render as inline images.
+    static const QRegularExpression urlRe(
+        u"(https?://[^\\s<>\"]+)"_s,
+        QRegularExpression::CaseInsensitiveOption);
+
+    const int emoteH =
+        this->messageText_->fontMetrics().height() +
+        this->messageText_->fontMetrics().leading();
+
+    QString html;
+    html.reserve(pin->messageText.size() * 2);
+
+    const auto appendTextWithLinks = [&](const QString &text) {
+        int last = 0;
+        auto it = urlRe.globalMatch(text);
+        while (it.hasNext())
+        {
+            const auto match = it.next();
+            html += text.mid(last, match.capturedStart() - last).toHtmlEscaped();
+            const auto url = match.captured(1).toHtmlEscaped();
+            html += u"<a href=\"%1\">%2</a>"_s.arg(url, url);
+            last = match.capturedEnd();
+        }
+        html += text.mid(last).toHtmlEscaped();
+    };
+
+    if (pin->fragments.empty())
+    {
+        appendTextWithLinks(pin->messageText);
+    }
+    else
+    {
+        for (const auto &frag : pin->fragments)
+        {
+            if (frag.type == HelixMessageFragment::Type::Emote &&
+                !frag.emoteId.isEmpty())
+            {
+                const auto src =
+                    u"https://static-cdn.jtvnw.net/emoticons/v2/%1/default/dark/1.0"_s
+                        .arg(frag.emoteId);
+                html +=
+                    u"<img src=\"%1\" height=\"%2\" alt=\"%3\" title=\"%3\">"_s
+                        .arg(src, QString::number(emoteH),
+                             frag.text.toHtmlEscaped());
+            }
+            else
+            {
+                appendTextWithLinks(frag.text);
+            }
+        }
+    }
+
+    this->messageText_->setHtmlContent(html);
     this->updateMessageHeight();
 
     {
@@ -360,29 +479,29 @@ void PinnedMessageWidget::toggleUserPinned()
 
 void PinnedMessageWidget::updateMessageHeight()
 {
-    if (!this->messageLabel_ || !this->messageScrollArea_)
+    if (!this->messageText_)
     {
         return;
     }
 
-    // Wrapped height of the label at the current viewport width.
-    this->lastViewportWidth_ = this->messageScrollArea_->viewport()->width();
-    int contentH =
-        this->messageLabel_->heightForWidth(this->lastViewportWidth_);
-    if (contentH <= 0)
+    // Reflow the document at the current viewport width, then measure its height.
+    const int vw = this->messageText_->viewport()->width();
+    if (vw <= 0)
     {
-        contentH = this->messageLabel_->sizeHint().height();
+        return;
     }
+    this->lastViewportWidth_ = vw;
+    auto *doc = this->messageText_->document();
+    doc->setTextWidth(vw);
+    const int contentH = qMax(1, qRound(doc->size().height()));
 
     // Size to content, but never taller than the cap.
-    this->messageScrollArea_->setFixedHeight(
-        qBound(1, contentH, this->messageMaxHeight_));
+    this->messageText_->setFixedHeight(qBound(1, contentH, this->messageMaxHeight_));
 }
 
 void PinnedMessageWidget::updateMessageHeightIfNeeded()
 {
-    if (this->lastViewportWidth_ !=
-        this->messageScrollArea_->viewport()->width())
+    if (this->lastViewportWidth_ != this->messageText_->viewport()->width())
     {
         this->updateMessageHeight();
     }
@@ -416,9 +535,10 @@ void PinnedMessageWidget::scaleChangedEvent(float newScale)
     this->pinnedByLabel_->setFont(headerFont);
     this->countdownLabel_->setFont(headerFont);
 
-    QFont bodyFont = this->messageLabel_->font();
+    QFont bodyFont = this->messageText_->font();
     bodyFont.setPointSizeF(11.0F * s);
-    this->messageLabel_->setFont(bodyFont);
+    this->messageText_->setFont(bodyFont);
+    this->messageText_->document()->setDefaultFont(bodyFont);
     this->messageMaxHeight_ = int(110 * s);
     this->updateMessageHeight();
 

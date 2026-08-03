@@ -37,6 +37,16 @@ constexpr int MAX_POLL_MS = 15000;
 constexpr int DEFAULT_POLL_MS = 5000;
 constexpr int ERROR_RETRY_MS = 10000;
 
+constexpr int PAGE_FETCH_TIMEOUT_MS = 15000;
+constexpr int LIVE_CHAT_TIMEOUT_MS = 20000;
+
+// Innertube client context sent with every request.
+// clientVersion follows YouTube's YYYY-MMDD.HH.MM format.
+constexpr const char *INNERTUBE_CLIENT_NAME = "WEB";
+constexpr const char *INNERTUBE_CLIENT_VERSION = "2.20260101.00.00";
+// Numeric ID for the WEB client (sent in X-YouTube-Client-Name header).
+constexpr const char *INNERTUBE_CLIENT_NAME_NUM = "1";
+
 // Headers that make requests look like a real browser
 const char *USER_AGENT =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -79,44 +89,42 @@ QString findKey(const QJsonObject &obj, const QString &key)
 }
 
 /// Extract the live chat continuation token from ytInitialData.
-/// Looks for reloadContinuationData.continuation under liveChatRenderer.
+/// Tries the standard liveChatRenderer path, then falls back to a recursive
+/// search for any continuation string under a known continuation data key.
 QString extractInitialContinuation(const QJsonObject &root)
 {
-    // Known path: contents.twoColumnWatchNextResults.conversationBar
-    //             .liveChatRenderer.continuations[0].reloadContinuationData.continuation
+    // Standard path: contents.twoColumnWatchNextResults.conversationBar
+    //                .liveChatRenderer.continuations[0].<type>.continuation
     auto contents = root["contents"].toObject();
     auto two = contents["twoColumnWatchNextResults"].toObject();
     auto bar = two["conversationBar"].toObject();
     auto lcr = bar["liveChatRenderer"].toObject();
-    if (lcr.isEmpty())
+    if (!lcr.isEmpty())
     {
-        // Fallback: search recursively for reloadContinuationData
-        return findKey(root, "reloadContinuationData");
-    }
-
-    auto continuations = lcr["continuations"].toArray();
-    if (continuations.isEmpty())
-    {
-        return {};
-    }
-
-    // Try reloadContinuationData first, then timedContinuationData
-    auto first = continuations[0].toObject();
-    {
-        auto rcd = first["reloadContinuationData"].toObject();
-        if (!rcd.isEmpty())
+        auto continuations = lcr["continuations"].toArray();
+        if (!continuations.isEmpty())
         {
-            return rcd["continuation"].toString();
+            auto first = continuations[0].toObject();
+            for (const auto *key :
+                 {"reloadContinuationData", "timedContinuationData",
+                  "invalidationContinuationData"})
+            {
+                auto inner = first[QLatin1String(key)].toObject();
+                if (!inner.isEmpty())
+                {
+                    const auto cont = inner["continuation"].toString();
+                    if (!cont.isEmpty())
+                    {
+                        return cont;
+                    }
+                }
+            }
         }
     }
-    {
-        auto tcd = first["timedContinuationData"].toObject();
-        if (!tcd.isEmpty())
-        {
-            return tcd["continuation"].toString();
-        }
-    }
-    return {};
+
+    // Fallback: recursively search for "continuation" inside any
+    // *ContinuationData object, which is more robust against page restructures.
+    return findKey(root, "continuation");
 }
 
 /// Extract the Innertube API key embedded in the page HTML.
@@ -273,6 +281,7 @@ void YouTubeChannel::fetchChannelLivePage(const QString &handle)
         .header("User-Agent", USER_AGENT)
         .header("Accept-Language", "en-US,en;q=0.9")
         .followRedirects(true)
+        .timeout(PAGE_FETCH_TIMEOUT_MS)
         .onSuccess([weak](const NetworkResult &result) {
             auto self =
                 std::static_pointer_cast<YouTubeChannel>(weak.lock());
@@ -316,6 +325,9 @@ void YouTubeChannel::fetchChannelLivePage(const QString &handle)
             }
 
             self->live_ = true;
+            self->addSystemMessage(
+                u"YouTube: Live chat found for %1, connecting..."_s.arg(
+                    self->videoId_));
             self->fetchLiveChat(continuation);
         })
         .onError([weak](const NetworkResult &result) {
@@ -343,6 +355,7 @@ void YouTubeChannel::fetchWatchPage()
         .header("User-Agent", USER_AGENT)
         .header("Accept-Language", "en-US,en;q=0.9")
         .followRedirects(true)
+        .timeout(PAGE_FETCH_TIMEOUT_MS)
         .onSuccess([weak](const NetworkResult &result) {
             auto self =
                 std::static_pointer_cast<YouTubeChannel>(weak.lock());
@@ -373,6 +386,7 @@ void YouTubeChannel::fetchWatchPage()
             }
 
             self->live_ = true;
+            self->addSystemMessage(u"YouTube: Live chat found, connecting..."_s);
             self->fetchLiveChat(continuation);
         })
         .onError([weak](const NetworkResult &result) {
@@ -408,8 +422,8 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
         {"context",
          QJsonObject{{"client",
                       QJsonObject{
-                          {"clientName", "WEB"},
-                          {"clientVersion", "2.20240101.00.00"},
+                          {"clientName", INNERTUBE_CLIENT_NAME},
+                          {"clientVersion", INNERTUBE_CLIENT_VERSION},
                           {"hl", "en"},
                           {"gl", "US"},
                       }}}},
@@ -435,8 +449,9 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
         .header("Accept-Language", "en-US,en;q=0.9")
         .header("Origin", "https://www.youtube.com")
         .header("Referer", referer)
-        .header("X-YouTube-Client-Name", "1")
-        .header("X-YouTube-Client-Version", "2.20240101.00.00")
+        .header("X-YouTube-Client-Name", INNERTUBE_CLIENT_NAME_NUM)
+        .header("X-YouTube-Client-Version", INNERTUBE_CLIENT_VERSION)
+        .timeout(LIVE_CHAT_TIMEOUT_MS)
         .onSuccess([weak](const NetworkResult &result) {
             auto self =
                 std::static_pointer_cast<YouTubeChannel>(weak.lock());

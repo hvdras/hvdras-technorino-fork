@@ -734,6 +734,13 @@ struct HelixCreateEventSubSubscriptionResponse {
         QDebug &dbg, const HelixCreateEventSubSubscriptionResponse &data);
 };
 
+struct HelixMessageFragment {
+    enum class Type : uint8_t { Text, Emote, Mention };
+    Type type = Type::Text;
+    QString text;
+    QString emoteId;  // non-empty for Emote type
+};
+
 struct HelixPinnedChatMessage {
     HelixMinimalUser sender;
     HelixMinimalUser pinnedBy;
@@ -741,6 +748,7 @@ struct HelixPinnedChatMessage {
     QString messageText;
     QDateTime startsAt;
     std::optional<QDateTime> endsAt;
+    std::vector<HelixMessageFragment> fragments;
 
     explicit HelixPinnedChatMessage(const QJsonObject &data)
         : sender({
@@ -762,6 +770,27 @@ struct HelixPinnedChatMessage {
         if (!endsAt.isEmpty())
         {
             this->endsAt = QDateTime::fromString(endsAt, Qt::ISODate);
+        }
+
+        const auto fragsArr =
+            data["message"].toObject()["fragments"].toArray();
+        this->fragments.reserve(fragsArr.size());
+        for (const auto &val : fragsArr)
+        {
+            const auto obj = val.toObject();
+            const auto typeStr = obj["type"].toString();
+            HelixMessageFragment frag;
+            frag.text = obj["text"].toString();
+            if (typeStr == u"emote")
+            {
+                frag.type = HelixMessageFragment::Type::Emote;
+                frag.emoteId = obj["emote"].toObject()["id"].toString();
+            }
+            else if (typeStr == u"mention")
+            {
+                frag.type = HelixMessageFragment::Type::Mention;
+            }
+            this->fragments.push_back(std::move(frag));
         }
     }
 };
