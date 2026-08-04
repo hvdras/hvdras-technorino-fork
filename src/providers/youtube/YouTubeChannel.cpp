@@ -462,7 +462,7 @@ MessagePtr makeYouTubeDeletionMessage(const MessagePtr &original)
     return builder.release();
 }
 
-/// Handle a `markChatItemAsDeletedAction`: a single message was removed by a
+/// Handle a `removeChatItemAction`: a single message was removed by a
 /// moderator (or by the author themselves).
 void handleMessageDeleted(Channel &channel, const QJsonObject &action)
 {
@@ -476,7 +476,7 @@ void handleMessageDeleted(Channel &channel, const QJsonObject &action)
     if (!msg)
     {
         qCWarning(chatterinoYoutube)
-            << "markChatItemAsDeletedAction targeted unknown message id"
+            << "removeChatItemAction targeted unknown message id"
             << targetItemId;
         return;
     }
@@ -491,8 +491,8 @@ void handleMessageDeleted(Channel &channel, const QJsonObject &action)
     }
 }
 
-/// Handle a `markChatItemsByAuthorAsDeletedAction`: all of a user's messages
-/// were removed, e.g. as part of a ban.
+/// Handle a `removeChatItemByAuthorAction`: all of a user's messages were
+/// removed, e.g. as part of a ban/timeout.
 void handleAuthorMessagesDeleted(Channel &channel, const QJsonObject &action)
 {
     const auto externalChannelId = action["externalChannelId"].toString();
@@ -521,8 +521,8 @@ void handleAuthorMessagesDeleted(Channel &channel, const QJsonObject &action)
     if (authorName.isEmpty())
     {
         qCWarning(chatterinoYoutube)
-            << "markChatItemsByAuthorAsDeletedAction targeted unknown "
-               "author channel id"
+            << "removeChatItemByAuthorAction targeted unknown author "
+               "channel id"
             << externalChannelId;
         return;
     }
@@ -809,12 +809,6 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
                 return;
             }
 
-            // TEMP diagnostic: see whether responses carry anything besides
-            // the classic continuationContents/actions structure (e.g. a
-            // newer entity-mutation system) that we're currently ignoring.
-            qCWarning(chatterinoYoutube)
-                << "response root keys:" << root.keys();
-
             auto cc =
                 root["continuationContents"].toObject()["liveChatContinuation"]
                     .toObject();
@@ -864,13 +858,12 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
             {
                 auto action = actionVal.toObject();
 
-                // TEMP diagnostic: log every action's top-level keys
-                // unconditionally so we can see exactly what YouTube sends.
-                qCWarning(chatterinoYoutube)
-                    << "action keys:" << action.keys();
-
+                // Note: the live polling endpoint uses removeChatItemAction /
+                // removeChatItemByAuthorAction, not the markChatItemAs...
+                // actions documented for chat replay - confirmed by logging
+                // raw action keys against a real moderation event.
                 if (auto deleteAction =
-                        action["markChatItemAsDeletedAction"].toObject();
+                        action["removeChatItemAction"].toObject();
                     !deleteAction.isEmpty())
                 {
                     handleMessageDeleted(*self, deleteAction);
@@ -878,8 +871,7 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
                 }
 
                 if (auto banAction =
-                        action["markChatItemsByAuthorAsDeletedAction"]
-                            .toObject();
+                        action["removeChatItemByAuthorAction"].toObject();
                     !banAction.isEmpty())
                 {
                     handleAuthorMessagesDeleted(*self, banAction);
