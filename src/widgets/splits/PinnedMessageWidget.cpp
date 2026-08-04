@@ -462,9 +462,12 @@ void PinnedMessageWidget::refresh()
         u"(https?://[^\\s<>\"]+)"_s,
         QRegularExpression::CaseInsensitiveOption);
 
-    const int emoteH =
-        this->messageText_->fontMetrics().height() +
-        this->messageText_->fontMetrics().leading();
+    // Match the rest of chat's emote size setting, on top of the line height
+    // (so emotes stay in proportion to the body font set in scaleChangedEvent).
+    const int emoteH = qRound(
+        (this->messageText_->fontMetrics().height() +
+         this->messageText_->fontMetrics().leading()) *
+        getSettings()->emoteScale.getValue());
 
     QString html;
     html.reserve(pin->messageText.size() * 2);
@@ -665,23 +668,31 @@ void PinnedMessageWidget::hideEvent(QHideEvent *event)
 
 void PinnedMessageWidget::scaleChangedEvent(float newScale)
 {
+    // Track the same font the rest of chat uses, so the pinned banner
+    // doesn't drift out of sync when the user changes their chat font size.
+    const float chatFontPt = float(getSettings()->chatFontSize.getValue());
     const float s = newScale * std::clamp(float(getSettings()->pinnedMessageScale),
                                           0.5F, 2.0F);
 
     QFont headerFont = this->pinnedByLabel_->font();
-    headerFont.setPointSizeF(9.5F * s);
+    headerFont.setFamily(getSettings()->chatFontFamily.getValue());
+    headerFont.setPointSizeF(chatFontPt * 0.86F * s);
     this->pinnedByLabel_->setFont(headerFont);
     this->countdownLabel_->setFont(headerFont);
 
     QFont bodyFont = this->messageText_->font();
-    bodyFont.setPointSizeF(11.0F * s);
+    bodyFont.setFamily(getSettings()->chatFontFamily.getValue());
+    bodyFont.setWeight(
+        static_cast<QFont::Weight>(getSettings()->chatFontWeight.getValue()));
+    bodyFont.setPointSizeF(chatFontPt * s);
     this->messageText_->setFont(bodyFont);
     this->messageText_->document()->setDefaultFont(bodyFont);
     this->messageMaxHeight_ = int(110 * s);
     this->updateMessageHeight();
 
     QFont footerFont = this->footerLabel_->font();
-    footerFont.setPointSizeF(9.0F * s);
+    footerFont.setFamily(getSettings()->chatFontFamily.getValue());
+    footerFont.setPointSizeF(chatFontPt * 0.82F * s);
     this->footerLabel_->setFont(footerFont);
 }
 
