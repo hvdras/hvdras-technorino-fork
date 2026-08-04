@@ -13,6 +13,7 @@
 #include "messages/Message.hpp"
 #include "messages/MessageBuilder.hpp"
 #include "messages/MessageElement.hpp"
+#include "singletons/Settings.hpp"
 
 #include <QColor>
 #include <QDateTime>
@@ -213,6 +214,102 @@ QString runsToText(const QJsonArray &runs)
     return result;
 }
 
+/// Returns a cached emote for a YouTube emoji run, built from its image
+/// thumbnail. Returns nullptr if the run has no usable image (the caller
+/// should fall back to the shortcode/emojiId text in that case).
+EmotePtr getYouTubeEmoji(const QJsonObject &emoji)
+{
+    static QHash<QString, EmotePtr> cache;
+
+    const auto emojiId = emoji["emojiId"].toString();
+    if (emojiId.isEmpty())
+    {
+        return nullptr;
+    }
+
+    auto it = cache.constFind(emojiId);
+    if (it != cache.constEnd())
+    {
+        return it.value();
+    }
+
+    const auto thumbnails =
+        emoji["image"].toObject()["thumbnails"].toArray();
+    if (thumbnails.isEmpty())
+    {
+        return nullptr;
+    }
+    const auto url = thumbnails.last().toObject()["url"].toString();
+    if (url.isEmpty())
+    {
+        return nullptr;
+    }
+
+    QString name = emojiId;
+    const auto shortcuts = emoji["shortcuts"].toArray();
+    if (!shortcuts.isEmpty())
+    {
+        name = shortcuts[0].toString();
+    }
+
+    auto emote = std::make_shared<const Emote>(Emote{
+        .name = {name},
+        .images = ImageSet{Image::fromAutoscaledUrl({url}, 24)},
+        .tooltip = Tooltip{name},
+    });
+    cache.insert(emojiId, emote);
+    return emote;
+}
+
+/// Append a YouTube "runs" array (list of text/emoji run objects) to a
+/// message as alternating text and emote elements, rendering emoji as real
+/// images (falling back to their shortcode/emojiId as text when no image
+/// is available).
+void appendMessageRuns(MessageBuilder &builder, const QJsonArray &runs)
+{
+    for (const auto &runVal : runs)
+    {
+        auto run = runVal.toObject();
+        if (run.contains("text"_L1))
+        {
+            builder.emplace<TextElement>(
+                run["text"].toString(),
+                MessageElementFlags{MessageElementFlag::Text},
+                MessageColor::Text);
+            continue;
+        }
+
+        if (!run.contains("emoji"_L1))
+        {
+            continue;
+        }
+
+        auto emoji = run["emoji"].toObject();
+        if (auto emote = getYouTubeEmoji(emoji))
+        {
+            builder.emplace<EmoteElement>(emote, MessageElementFlag::Emote);
+            continue;
+        }
+
+        QString fallback;
+        const auto shortcuts = emoji["shortcuts"].toArray();
+        if (!shortcuts.isEmpty())
+        {
+            fallback = shortcuts[0].toString();
+        }
+        else
+        {
+            fallback = emoji["emojiId"].toString();
+        }
+        if (!fallback.isEmpty())
+        {
+            builder.emplace<TextElement>(
+                fallback, MessageElementFlags{MessageElementFlag::Text},
+                MessageColor::Text);
+        }
+    }
+}
+
 /// Returns a cached badge emote for a fixed YouTube badge icon type
 /// (moderator, verified, or channel owner), backed by bundled local icons.
 EmotePtr getYouTubeIconBadge(const QString &iconType)
@@ -331,6 +428,99 @@ std::vector<std::pair<EmotePtr, MessageElementFlag>> parseAuthorBadges(
     }
 
     return badges;
+}
+
+/// Build a small system notice for a deleted message, matching the style of
+/// Twitch/Kick's "A message from X was deleted: ..." notices.
+MessagePtr makeYouTubeDeletionMessage(const MessagePtr &original)
+{
+    MessageBuilder builder;
+    builder->flags.set(MessageFlag::System);
+    builder->flags.set(MessageFlag::DoNotTriggerNotification);
+    builder->flags.set(MessageFlag::ModerationAction);
+
+    builder.emplace<TimestampElement>();
+    builder.emplace<TextElement>(u"A message from"_s, MessageElementFlag::Text,
+                                 MessageColor::System);
+    builder.emplace<TextElement>(original->displayName,
+                                 MessageElementFlag::Username,
+                                 MessageColor::System, FontStyle::ChatMediumBold);
+    builder.emplace<TextElement>(u"was deleted:"_s, MessageElementFlag::Text,
+                                 MessageColor::System);
+
+    auto text = original->messageText;
+    const auto limit = getSettings()->deletedMessageLengthLimit.getValue();
+    if (limit > 0 && text.length() > limit)
+    {
+        text = text.left(limit) + u"…"_s;
+    }
+    builder.emplace<TextElement>(text, MessageElementFlag::Text,
+                                 MessageColor::Text);
+
+    builder->messageText = original->messageText;
+    builder->searchText = original->messageText;
+    return builder.release();
+}
+
+/// Handle a `markChatItemAsDeletedAction`: a single message was removed by a
+/// moderator (or by the author themselves).
+void handleMessageDeleted(Channel &channel, const QJsonObject &action)
+{
+    const auto targetItemId = action["targetItemId"].toString();
+    if (targetItemId.isEmpty())
+    {
+        return;
+    }
+
+    auto msg = channel.findMessageByID(targetItemId);
+    if (!msg)
+    {
+        return;
+    }
+
+    msg->flags.set(MessageFlag::Disabled);
+    msg->flags.set(MessageFlag::InvalidReplyTarget);
+
+    if (!getSettings()->hideDeletionActions)
+    {
+        channel.addMessage(makeYouTubeDeletionMessage(msg),
+                           MessageContext::Original);
+    }
+}
+
+/// Handle a `markChatItemsByAuthorAsDeletedAction`: all of a user's messages
+/// were removed, e.g. as part of a ban.
+void handleAuthorMessagesDeleted(Channel &channel, const QJsonObject &action)
+{
+    const auto externalChannelId = action["externalChannelId"].toString();
+    if (externalChannelId.isEmpty())
+    {
+        return;
+    }
+
+    QString authorName;
+    for (const auto &msg : channel.getMessageSnapshot())
+    {
+        if (msg->userID != externalChannelId)
+        {
+            continue;
+        }
+
+        if (authorName.isEmpty())
+        {
+            authorName = msg->displayName;
+        }
+
+        msg->flags.set(MessageFlag::Disabled);
+        msg->flags.set(MessageFlag::InvalidReplyTarget);
+    }
+
+    if (!authorName.isEmpty() && !getSettings()->hideDeletionActions)
+    {
+        channel.addSystemMessage(
+            u"YouTube: %1's messages were removed by a moderator."_s.arg(
+                authorName));
+    }
 }
 
 }  // namespace
@@ -655,6 +845,24 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
             for (const auto &actionVal : actions)
             {
                 auto action = actionVal.toObject();
+
+                if (auto deleteAction =
+                        action["markChatItemAsDeletedAction"].toObject();
+                    !deleteAction.isEmpty())
+                {
+                    handleMessageDeleted(*self, deleteAction);
+                    continue;
+                }
+
+                if (auto banAction =
+                        action["markChatItemsByAuthorAsDeletedAction"]
+                            .toObject();
+                    !banAction.isEmpty())
+                {
+                    handleAuthorMessagesDeleted(*self, banAction);
+                    continue;
+                }
+
                 auto addItem =
                     action["addChatItemAction"].toObject()["item"].toObject();
 
@@ -668,8 +876,9 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
 
                 const QString authorName =
                     renderer["authorName"].toObject()["simpleText"].toString();
-                const QString messageText =
-                    runsToText(renderer["message"].toObject()["runs"].toArray());
+                const auto messageRuns =
+                    renderer["message"].toObject()["runs"].toArray();
+                const QString messageText = runsToText(messageRuns);
                 const qint64 timestampUsec =
                     renderer["timestampUsec"].toString().toLongLong();
 
@@ -679,8 +888,15 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
                 }
 
                 MessageBuilder builder;
+                builder->id = renderer["id"].toString();
                 builder->channelName = self->getName();
                 builder->platform = MessagePlatform::YouTube;
+                builder->loginName = authorName;
+                builder->displayName = authorName;
+                builder->userID =
+                    renderer["authorExternalChannelId"].toString();
+                builder->messageText = messageText;
+                builder->searchText = authorName % u": "_s % messageText;
 
                 builder
                     .emplace<TextElement>(u"#"_s % self->getName(),
@@ -711,9 +927,7 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
                     MessageColor{YOUTUBE_RED},
                     FontStyle::ChatMediumBold);
 
-                builder.emplace<TextElement>(
-                    messageText, MessageElementFlags{MessageElementFlag::Text},
-                    MessageColor::Text);
+                appendMessageRuns(builder, messageRuns);
 
                 self->addMessage(builder.release(), MessageContext::Original);
             }
