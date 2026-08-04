@@ -8,13 +8,20 @@
 #include "common/network/NetworkRequest.hpp"
 #include "common/network/NetworkResult.hpp"
 #include "controllers/accounts/AccountController.hpp"
+#include "messages/Emote.hpp"
+#include "providers/bttv/BttvEmotes.hpp"
+#include "providers/ffz/FfzEmotes.hpp"
+#include "providers/seventv/SeventvEmotes.hpp"
 #include "providers/twitch/api/Helix.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
 #include "singletons/Settings.hpp"
 #include "singletons/Theme.hpp"
 #include "widgets/buttons/DrawnButton.hpp"
+#include "widgets/dialogs/UserInfoPopup.hpp"
+#include "widgets/splits/Split.hpp"
 
+#include <QCursor>
 #include <QDesktopServices>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -119,6 +126,62 @@ namespace {
 
 constexpr auto MUTED_STYLE = "color: #adadb8;";
 
+/// Look up a third-party (BTTV/FFZ/7TV) emote by exact word match, checking
+/// the channel's own emotes before falling back to each provider's global set.
+EmotePtr findThirdPartyEmote(TwitchChannel *channel, const QString &word)
+{
+    if (!channel)
+    {
+        return nullptr;
+    }
+
+    const EmoteName name{word};
+
+    if (auto emotes = channel->bttvEmotes())
+    {
+        auto it = emotes->find(name);
+        if (it != emotes->end())
+        {
+            return it->second;
+        }
+    }
+    if (auto emotes = channel->ffzEmotes())
+    {
+        auto it = emotes->find(name);
+        if (it != emotes->end())
+        {
+            return it->second;
+        }
+    }
+    if (auto emotes = channel->seventvEmotes())
+    {
+        auto it = emotes->find(name);
+        if (it != emotes->end())
+        {
+            return it->second;
+        }
+    }
+
+    if (auto emote = getApp()->getBttvEmotes()->emote(name))
+    {
+        return *emote;
+    }
+    if (auto emote = getApp()->getFfzEmotes()->emote(name))
+    {
+        return *emote;
+    }
+    if (auto emotes = getApp()->getSeventvEmotes()->globalEmotes())
+    {
+        auto it = emotes->find(name);
+        if (it != emotes->end())
+        {
+            return it->second;
+        }
+    }
+
+    return nullptr;
+}
+
 }  // namespace
 
 PinnedMessageWidget::PinnedMessageWidget(QWidget *parent)
@@ -158,7 +221,12 @@ PinnedMessageWidget::PinnedMessageWidget(QWidget *parent)
     // Message body — QTextBrowser renders rich text with clickable links and
     // async-loaded emote images.
     QObject::connect(this->messageText_, &QTextBrowser::anchorClicked,
-                     [](const QUrl &url) {
+                     [this](const QUrl &url) {
+                         if (url.scheme() == u"usercard"_s)
+                         {
+                             this->openUserCard(url.path());
+                             return;
+                         }
                          QDesktopServices::openUrl(url);
                      });
     contentBox->addWidget(this->messageText_);
@@ -267,6 +335,28 @@ void PinnedMessageWidget::paintEvent(QPaintEvent *event)
     // Draw 1px top border
     painter.setPen(theme->splits.header.border);
     painter.drawLine(0, 0, this->width() - 1, 0);
+}
+
+void PinnedMessageWidget::openUserCard(const QString &login)
+{
+    if (login.isEmpty())
+    {
+        return;
+    }
+
+    auto *split = qobject_cast<Split *>(this->parentWidget());
+    if (!split)
+    {
+        return;
+    }
+
+    auto *userPopup = new UserInfoPopup(getSettings()->autoCloseUserPopup, split);
+    userPopup->setData(login, split->getChannel());
+
+    QPoint offset(userPopup->width() / 3, userPopup->height() / 5);
+    userPopup->moveTo(QCursor::pos() - offset,
+                      widgets::BoundsChecking::CursorPosition);
+    userPopup->show();
 }
 
 void PinnedMessageWidget::setChannel(TwitchChannel *channel)
@@ -379,6 +469,20 @@ void PinnedMessageWidget::refresh()
     QString html;
     html.reserve(pin->messageText.size() * 2);
 
+    // Prefix the body with the sender, like a regular chat message, linking
+    // to their usercard.
+    {
+        const QColor senderColor =
+            this->channel_->getUserColor(pin->sender.login);
+        const QString colorStyle = senderColor.isValid()
+                                       ? u" style=\"color:%1;\""_s.arg(
+                                             senderColor.name())
+                                       : QString();
+        html += u"<a href=\"usercard:%1\"%2><b>%3</b></a>: "_s.arg(
+            pin->sender.login.toHtmlEscaped(), colorStyle,
+            pin->sender.formatted(mode).toHtmlEscaped());
+    }
+
     const auto appendTextWithLinks = [&](const QString &text) {
         int last = 0;
         auto it = urlRe.globalMatch(text);
@@ -393,9 +497,43 @@ void PinnedMessageWidget::refresh()
         html += text.mid(last).toHtmlEscaped();
     };
 
+    // Splits on spaces (matching how the rest of the app tokenizes emotes)
+    // so third-party emote codes can be substituted with images while URLs
+    // are still linkified.
+    const auto appendWordsWithEmotesAndLinks = [&](const QString &text) {
+        const auto words = text.split(u' ');
+        for (int i = 0; i < words.size(); ++i)
+        {
+            if (i > 0)
+            {
+                html += u' ';
+            }
+            const auto &word = words[i];
+            if (word.isEmpty())
+            {
+                continue;
+            }
+
+            if (auto emote = findThirdPartyEmote(this->channel_, word))
+            {
+                const auto &image = emote->images.getImageOrLoaded(1.0);
+                if (!image->isEmpty())
+                {
+                    html +=
+                        u"<img src=\"%1\" height=\"%2\" alt=\"%3\" title=\"%3\">"_s
+                            .arg(image->url().string, QString::number(emoteH),
+                                 emote->name.string.toHtmlEscaped());
+                    continue;
+                }
+            }
+
+            appendTextWithLinks(word);
+        }
+    };
+
     if (pin->fragments.empty())
     {
-        appendTextWithLinks(pin->messageText);
+        appendWordsWithEmotesAndLinks(pin->messageText);
     }
     else
     {
@@ -414,7 +552,7 @@ void PinnedMessageWidget::refresh()
             }
             else
             {
-                appendTextWithLinks(frag.text);
+                appendWordsWithEmotesAndLinks(frag.text);
             }
         }
     }

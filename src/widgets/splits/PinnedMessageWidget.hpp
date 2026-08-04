@@ -54,6 +54,9 @@ protected:
 private:
     void paintEvent(QPaintEvent *event) override;
     void refresh();
+    /// Opens the usercard popup for the given login, parented to the
+    /// enclosing Split. No-op if this widget isn't inside a Split.
+    void openUserCard(const QString &login);
     /// Builds the moderator menu shown when clicking the menu button.
     std::unique_ptr<QMenu> buildModMenu();
     void tickProgress();

@@ -475,6 +475,9 @@ void handleMessageDeleted(Channel &channel, const QJsonObject &action)
     auto msg = channel.findMessageByID(targetItemId);
     if (!msg)
     {
+        qCWarning(chatterinoYoutube)
+            << "markChatItemAsDeletedAction targeted unknown message id"
+            << targetItemId;
         return;
     }
 
@@ -515,7 +518,16 @@ void handleAuthorMessagesDeleted(Channel &channel, const QJsonObject &action)
         msg->flags.set(MessageFlag::InvalidReplyTarget);
     }
 
-    if (!authorName.isEmpty() && !getSettings()->hideDeletionActions)
+    if (authorName.isEmpty())
+    {
+        qCWarning(chatterinoYoutube)
+            << "markChatItemsByAuthorAsDeletedAction targeted unknown "
+               "author channel id"
+            << externalChannelId;
+        return;
+    }
+
+    if (!getSettings()->hideDeletionActions)
     {
         channel.addSystemMessage(
             u"YouTube: %1's messages were removed by a moderator."_s.arg(
@@ -863,14 +875,25 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
                     continue;
                 }
 
-                auto addItem =
-                    action["addChatItemAction"].toObject()["item"].toObject();
+                auto addChatItemAction = action["addChatItemAction"].toObject();
+                if (addChatItemAction.isEmpty())
+                {
+                    qCWarning(chatterinoYoutube)
+                        << "Unhandled live chat action with keys"
+                        << action.keys();
+                    continue;
+                }
+
+                auto addItem = addChatItemAction["item"].toObject();
 
                 // Only handle regular text messages
                 auto renderer =
                     addItem["liveChatTextMessageRenderer"].toObject();
                 if (renderer.isEmpty())
                 {
+                    qCWarning(chatterinoYoutube)
+                        << "Unhandled addChatItemAction item with keys"
+                        << addItem.keys();
                     continue;
                 }
 
