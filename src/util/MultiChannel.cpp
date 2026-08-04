@@ -379,9 +379,9 @@ bool platformMatches(MessagePlatform lhs, MultiChannel::Platform rhs) noexcept
             return rhs == MultiChannel::Platform::Twitch;
         case MessagePlatform::Kick:
             return rhs == MultiChannel::Platform::Kick;
+        case MessagePlatform::YouTube:
+            return rhs == MultiChannel::Platform::YouTube;
     }
-    // YouTube messages use AnyOrTwitch as platform; they won't match YouTube
-    // slots here, which is acceptable since YouTube has no badge indicator.
     return false;
 }
 

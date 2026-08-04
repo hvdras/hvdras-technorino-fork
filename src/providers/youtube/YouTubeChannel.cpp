@@ -8,12 +8,15 @@
 #include "common/network/NetworkRequest.hpp"
 #include "common/network/NetworkResult.hpp"
 #include "common/QLogging.hpp"
+#include "messages/Emote.hpp"
+#include "messages/Image.hpp"
 #include "messages/Message.hpp"
 #include "messages/MessageBuilder.hpp"
 #include "messages/MessageElement.hpp"
 
 #include <QColor>
 #include <QDateTime>
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -208,6 +211,126 @@ QString runsToText(const QJsonArray &runs)
         }
     }
     return result;
+}
+
+/// Returns a cached badge emote for a fixed YouTube badge icon type
+/// (moderator, verified, or channel owner), backed by bundled local icons.
+EmotePtr getYouTubeIconBadge(const QString &iconType)
+{
+    static QHash<QString, EmotePtr> cache;
+    auto it = cache.constFind(iconType);
+    if (it != cache.constEnd())
+    {
+        return it.value();
+    }
+
+    QString asset;
+    QString name;
+    if (iconType == u"MODERATOR"_s)
+    {
+        asset = u"moderator"_s;
+        name = u"Moderator"_s;
+    }
+    else if (iconType == u"VERIFIED"_s)
+    {
+        asset = u"verified"_s;
+        name = u"Verified"_s;
+    }
+    else if (iconType == u"OWNER"_s)
+    {
+        asset = u"owner"_s;
+        name = u"Channel Owner"_s;
+    }
+    else
+    {
+        return nullptr;
+    }
+
+    auto emote = std::make_shared<const Emote>(Emote{
+        .name = {name},
+        .images =
+            ImageSet{
+                Image::fromUrl(
+                    {u":/badges/youtube-%1-18.png"_s.arg(asset)}, 1.0,
+                    {18, 18}),
+                Image::fromUrl(
+                    {u":/badges/youtube-%1-36.png"_s.arg(asset)}, .5,
+                    {36, 36}),
+            },
+        .tooltip = Tooltip{name},
+    });
+    cache.insert(iconType, emote);
+    return emote;
+}
+
+/// Returns a cached badge emote for a per-channel custom badge image
+/// (e.g. a channel membership badge) fetched from `url`.
+EmotePtr getYouTubeCustomBadge(const QString &url, const QString &tooltip)
+{
+    static QHash<QString, EmotePtr> cache;
+    auto it = cache.constFind(url);
+    if (it != cache.constEnd())
+    {
+        return it.value();
+    }
+
+    auto emote = std::make_shared<const Emote>(Emote{
+        .name = {tooltip},
+        .images = ImageSet{Image::fromAutoscaledUrl({url}, 18)},
+        .tooltip = Tooltip{tooltip},
+    });
+    cache.insert(url, emote);
+    return emote;
+}
+
+/// Parse the `authorBadges` array of a liveChatTextMessageRenderer into
+/// badge emotes ready to be emplaced into a message.
+std::vector<std::pair<EmotePtr, MessageElementFlag>> parseAuthorBadges(
+    const QJsonObject &renderer)
+{
+    std::vector<std::pair<EmotePtr, MessageElementFlag>> badges;
+
+    const auto authorBadges = renderer["authorBadges"].toArray();
+    for (const auto &badgeVal : authorBadges)
+    {
+        auto badgeRenderer =
+            badgeVal.toObject()["liveChatAuthorBadgeRenderer"].toObject();
+        if (badgeRenderer.isEmpty())
+        {
+            continue;
+        }
+
+        const auto tooltip = badgeRenderer["tooltip"].toString();
+
+        const auto thumbnails = badgeRenderer["customThumbnail"]
+                                     .toObject()["thumbnails"]
+                                     .toArray();
+        if (!thumbnails.isEmpty())
+        {
+            // The last entry is typically the highest resolution.
+            const auto url = thumbnails.last().toObject()["url"].toString();
+            if (!url.isEmpty())
+            {
+                if (auto emote = getYouTubeCustomBadge(
+                        url, tooltip.isEmpty() ? u"Member"_s : tooltip))
+                {
+                    badges.emplace_back(emote,
+                                        MessageElementFlag::BadgeSubscription);
+                }
+            }
+            continue;
+        }
+
+        const auto iconType =
+            badgeRenderer["icon"].toObject()["iconType"].toString();
+        if (auto emote = getYouTubeIconBadge(iconType))
+        {
+            badges.emplace_back(emote,
+                                MessageElementFlag::BadgeChannelAuthority);
+        }
+    }
+
+    return badges;
 }
 
 }  // namespace
@@ -557,6 +680,14 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
 
                 MessageBuilder builder;
                 builder->channelName = self->getName();
+                builder->platform = MessagePlatform::YouTube;
+
+                builder
+                    .emplace<TextElement>(u"#"_s % self->getName(),
+                                          MessageElementFlag::ChannelName,
+                                          MessageColor::System)
+                    ->setLink({Link::JumpToChannel,
+                              u":youtube:"_s % self->getName()});
 
                 if (timestampUsec > 0)
                 {
@@ -569,9 +700,14 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
                         ? builder->serverReceivedTime.toLocalTime().time()
                         : QTime::currentTime());
 
+                for (const auto &[emote, flag] : parseAuthorBadges(renderer))
+                {
+                    builder.emplace<BadgeElement>(emote, flag);
+                }
+
                 builder.emplace<TextElement>(
                     authorName + ':',
-                    MessageElementFlags{MessageElementFlag::Misc},
+                    MessageElementFlags{MessageElementFlag::Username},
                     MessageColor{YOUTUBE_RED},
                     FontStyle::ChatMediumBold);
 

@@ -149,6 +149,9 @@ QListWidgetItem *makeMultiChannelItem(const MultiChannel::Spec &spec)
         case MultiChannel::Platform::Kick:
             name += u"[K] ";
             break;
+        case MultiChannel::Platform::YouTube:
+            name += u"[Y] ";
+            break;
     }
     name += spec.name;
     auto *item = new QListWidgetItem(name);

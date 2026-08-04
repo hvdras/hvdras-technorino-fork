@@ -3450,10 +3450,16 @@ void ChannelView::handleLinkClick(QMouseEvent *event, const Link &link,
                     static_cast<SplitContainer *>(nb.getPageAt(i)));
             }
             QStringView searchName = link.value;
-            bool searchKickChannel = link.value.startsWith(u":kick:");
-            if (searchKickChannel)
+            MessagePlatform searchPlatform = MessagePlatform::AnyOrTwitch;
+            if (link.value.startsWith(u":kick:"))
             {
+                searchPlatform = MessagePlatform::Kick;
                 searchName = searchName.sliced(sizeof(":kick:") - 1);
+            }
+            else if (link.value.startsWith(u":youtube:"))
+            {
+                searchPlatform = MessagePlatform::YouTube;
+                searchName = searchName.sliced(sizeof(":youtube:") - 1);
             }
 
             for (auto *page : openPages)
@@ -3463,10 +3469,10 @@ void ChannelView::handleLinkClick(QMouseEvent *event, const Link &link,
                 // Search for channel matching link in page/split container
                 // TODO(zneix): Consider opening a channel if it's closed (?)
                 auto it = std::ranges::find_if(
-                    splits, [searchName, searchKickChannel](Split *split) {
+                    splits, [searchName, searchPlatform](Split *split) {
                         return split->getChannel()->getName() == searchName &&
-                               split->getChannel()->isKickChannel() ==
-                                   searchKickChannel;
+                               split->getChannel()->messagePlatform() ==
+                                   searchPlatform;
                     });
 
                 if (it != splits.end())

@@ -87,6 +87,7 @@ public:
     bool isTwitchChannel() const;
     bool isWatching() const;
     bool isKickChannel() const;
+    bool isYouTubeChannel() const;
     bool isTwitchOrKickChannel() const;
     virtual bool isEmpty() const;
 

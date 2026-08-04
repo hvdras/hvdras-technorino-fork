@@ -30,6 +30,7 @@ class ScrollbarHighlight;
 enum class MessagePlatform : uint8_t {
     AnyOrTwitch,
     Kick,
+    YouTube,
 };
 
 struct Message;
