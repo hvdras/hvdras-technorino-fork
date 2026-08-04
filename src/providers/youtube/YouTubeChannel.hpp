@@ -22,6 +22,9 @@ public:
     explicit YouTubeChannel(const QString &videoId);
     ~YouTubeChannel() override;
 
+    // Must be called once, immediately after the shared_ptr is created.
+    void initialize();
+
     const QString &videoId() const;
 
     bool canSendMessage() const override;

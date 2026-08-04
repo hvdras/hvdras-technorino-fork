@@ -237,6 +237,11 @@ YouTubeChannel::YouTubeChannel(const QString &nameOrHandle)
     : Channel(nameOrHandle, Type::YouTube)
     , videoId_(nameOrHandle)
 {
+}
+
+void YouTubeChannel::initialize()
+{
+    const auto &nameOrHandle = this->videoId_;
     if (looksLikeVideoId(nameOrHandle))
     {
         this->addSystemMessage(

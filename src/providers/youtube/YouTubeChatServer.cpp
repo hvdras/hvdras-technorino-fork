@@ -21,6 +21,9 @@ std::shared_ptr<Channel> YouTubeChatServer::getOrCreate(
     }
 
     auto chan = std::make_shared<YouTubeChannel>(videoId);
+    // initialize() must be called after shared_ptr construction so that
+    // weak_from_this() is valid inside the network request callbacks.
+    chan->initialize();
     this->channelsByVideoId_[videoId] = chan;
     return chan;
 }
