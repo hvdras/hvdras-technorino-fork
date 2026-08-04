@@ -809,6 +809,12 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
                 return;
             }
 
+            // TEMP diagnostic: see whether responses carry anything besides
+            // the classic continuationContents/actions structure (e.g. a
+            // newer entity-mutation system) that we're currently ignoring.
+            qCWarning(chatterinoYoutube)
+                << "response root keys:" << root.keys();
+
             auto cc =
                 root["continuationContents"].toObject()["liveChatContinuation"]
                     .toObject();
@@ -857,6 +863,11 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
             for (const auto &actionVal : actions)
             {
                 auto action = actionVal.toObject();
+
+                // TEMP diagnostic: log every action's top-level keys
+                // unconditionally so we can see exactly what YouTube sends.
+                qCWarning(chatterinoYoutube)
+                    << "action keys:" << action.keys();
 
                 if (auto deleteAction =
                         action["markChatItemAsDeletedAction"].toObject();
