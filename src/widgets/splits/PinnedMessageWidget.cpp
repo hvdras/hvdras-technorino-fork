@@ -279,7 +279,7 @@ PinnedMessageWidget::PinnedMessageWidget(QWidget *parent)
             this->scaleChangedEvent(this->scale());
             this->updateGeometry();
         },
-        this->signalHolder_);
+        this->settingsSignalHolder_);
 
     this->scaleChangedEvent(this->scale());
     this->hide();

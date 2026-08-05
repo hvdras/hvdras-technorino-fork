@@ -901,6 +901,13 @@ public:
     IntSetting repeatedMessagesRepetitionThreshold{"/moltorino/moderation/repeatedMessages/repetitionThreshold", 2};
     QStringSetting repeatedMessagesCounterColor{"/moltorino/moderation/repeatedMessages/counterColor", "#ff3b3b"};
 
+    // -- YouTube --
+    // A single live chat poll can return several seconds' worth of messages
+    // at once; these control the min/max delay (in ms) used to stagger
+    // their display instead of showing them all at once.
+    IntSetting youtubeMessageStaggerMinMs{"/moltorino/youtube/messageStaggerMinMs", 300};
+    IntSetting youtubeMessageStaggerMaxMs{"/moltorino/youtube/messageStaggerMaxMs", 1000};
+
     /// Timeout buttons
 
     ChatterinoSetting<std::vector<TimeoutButton>> timeoutButtons = {

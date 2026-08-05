@@ -441,6 +441,24 @@ void TechnorinoPage::initLayout(GeneralPageView &layout)
             "<text> to override per message.")
         ->addTo(layout);
 
+    layout.addTitle("YouTube");
+    layout.addDescription(
+        "A single live chat poll can return several seconds' worth of "
+        "messages at once; these control the delay used to stagger their "
+        "display instead of showing them all at once.");
+    SettingWidget::intInput("Minimum delay between messages",
+                            s.youtubeMessageStaggerMinMs,
+                            {.min = 0, .max = 5000, .suffix = " ms"})
+        ->setTooltip("Shortest delay used between two staggered messages, "
+                     "even if they were sent almost simultaneously.")
+        ->addTo(layout);
+    SettingWidget::intInput("Maximum delay between messages",
+                            s.youtubeMessageStaggerMaxMs,
+                            {.min = 0, .max = 5000, .suffix = " ms"})
+        ->setTooltip("Longest delay used between two staggered messages, "
+                     "even if they were actually sent far apart in time.")
+        ->addTo(layout);
+
     layout.addTitle("Moderation");
     SettingWidget::checkbox("Show repeated-message counters",
                             s.enableRepeatedMessageDetector)

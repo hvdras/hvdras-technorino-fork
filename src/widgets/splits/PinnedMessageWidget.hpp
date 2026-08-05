@@ -72,6 +72,9 @@ private:
 
     TwitchChannel *channel_ = nullptr;
     pajlada::Signals::SignalHolder signalHolder_;
+    // Separate from signalHolder_, which setChannel() clears every time the
+    // channel changes - connections here (e.g. settings) must outlive that.
+    pajlada::Signals::SignalHolder settingsSignalHolder_;
 
     // Header row
     QLabel *pinnedByLabel_ = nullptr;

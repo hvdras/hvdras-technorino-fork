@@ -44,14 +44,6 @@ constexpr int ERROR_RETRY_MS = 10000;
 // or a channel handle isn't currently live.
 constexpr int REDISCOVERY_RETRY_MS = 60000;
 
-// A single poll response can contain every message sent since the last
-// poll, several seconds' worth at once. Rather than dumping them all onto
-// screen simultaneously, they're displayed one at a time with a delay based
-// on their real relative timestamps (clamped to this range) so they read
-// more like messages actually arriving.
-constexpr qint64 MIN_MESSAGE_STAGGER_MS = 300;
-constexpr qint64 MAX_MESSAGE_STAGGER_MS = 1000;
-
 constexpr int PAGE_FETCH_TIMEOUT_MS = 15000;
 constexpr int LIVE_CHAT_TIMEOUT_MS = 20000;
 
@@ -67,6 +59,21 @@ const char *USER_AGENT =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/124.0.0.0 Safari/537.36";
+
+/// Reads the user-configurable min/max message stagger delay from
+/// settings, defensively clamping to non-negative and min <= max.
+std::pair<qint64, qint64> messageStaggerRangeMs()
+{
+    qint64 minMs =
+        std::max(0, getSettings()->youtubeMessageStaggerMinMs.getValue());
+    qint64 maxMs =
+        std::max(0, getSettings()->youtubeMessageStaggerMaxMs.getValue());
+    if (maxMs < minMs)
+    {
+        std::swap(minMs, maxMs);
+    }
+    return {minMs, maxMs};
+}
 
 /// Recursively search obj for the first string value at key.
 QString findKey(const QJsonObject &obj, const QString &key)
@@ -1112,7 +1119,10 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
                 // Later polls, though, can still bundle several seconds'
                 // worth of genuinely new messages into one batch - display
                 // those one at a time, staggered by real relative timing
-                // (clamped), instead of all at once.
+                // (clamped to the user-configurable range), instead of all
+                // at once.
+                const auto [minStaggerMs, maxStaggerMs] =
+                    messageStaggerRangeMs();
                 qint64 cumulativeDelayMs = 0;
                 qint64 prevTimestampUsec = 0;
                 bool firstMessage = true;
@@ -1126,13 +1136,13 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
                         continue;
                     }
 
-                    qint64 deltaMs = MIN_MESSAGE_STAGGER_MS;
+                    qint64 deltaMs = minStaggerMs;
                     if (timestampUsec > 0 && prevTimestampUsec > 0)
                     {
                         deltaMs = (timestampUsec - prevTimestampUsec) / 1000;
                     }
-                    deltaMs = std::clamp(deltaMs, MIN_MESSAGE_STAGGER_MS,
-                                         MAX_MESSAGE_STAGGER_MS);
+                    deltaMs =
+                        std::clamp(deltaMs, minStaggerMs, maxStaggerMs);
                     cumulativeDelayMs += deltaMs;
                     if (timestampUsec > 0)
                     {
