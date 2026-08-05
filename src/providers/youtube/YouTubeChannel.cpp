@@ -44,6 +44,14 @@ constexpr int ERROR_RETRY_MS = 10000;
 // or a channel handle isn't currently live.
 constexpr int REDISCOVERY_RETRY_MS = 60000;
 
+// A single poll response can contain every message sent since the last
+// poll, several seconds' worth at once. Rather than dumping them all onto
+// screen simultaneously, they're displayed one at a time with a delay based
+// on their real relative timestamps (clamped to this range) so they read
+// more like messages actually arriving.
+constexpr qint64 MIN_MESSAGE_STAGGER_MS = 50;
+constexpr qint64 MAX_MESSAGE_STAGGER_MS = 500;
+
 constexpr int PAGE_FETCH_TIMEOUT_MS = 15000;
 constexpr int LIVE_CHAT_TIMEOUT_MS = 20000;
 
@@ -961,6 +969,7 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
             }
 
             // Parse chat messages
+            std::vector<std::pair<qint64, MessagePtr>> pendingMessages;
             const auto actions = cc["actions"].toArray();
             for (const auto &actionVal : actions)
             {
@@ -1067,7 +1076,45 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
 
                 appendMessageRuns(builder, messageRuns);
 
-                self->addMessage(builder.release(), MessageContext::Original);
+                pendingMessages.emplace_back(timestampUsec, builder.release());
+            }
+
+            // Display the batch one message at a time, staggered by real
+            // relative timing (clamped), instead of all at once.
+            qint64 cumulativeDelayMs = 0;
+            qint64 prevTimestampUsec = 0;
+            bool firstMessage = true;
+            for (auto &[timestampUsec, msg] : pendingMessages)
+            {
+                if (firstMessage)
+                {
+                    self->addMessage(msg, MessageContext::Original);
+                    firstMessage = false;
+                    prevTimestampUsec = timestampUsec;
+                    continue;
+                }
+
+                qint64 deltaMs = MIN_MESSAGE_STAGGER_MS;
+                if (timestampUsec > 0 && prevTimestampUsec > 0)
+                {
+                    deltaMs = (timestampUsec - prevTimestampUsec) / 1000;
+                }
+                deltaMs = std::clamp(deltaMs, MIN_MESSAGE_STAGGER_MS,
+                                     MAX_MESSAGE_STAGGER_MS);
+                cumulativeDelayMs += deltaMs;
+                if (timestampUsec > 0)
+                {
+                    prevTimestampUsec = timestampUsec;
+                }
+
+                QTimer::singleShot(cumulativeDelayMs, [weak, msg] {
+                    auto self =
+                        std::static_pointer_cast<YouTubeChannel>(weak.lock());
+                    if (self)
+                    {
+                        self->addMessage(msg, MessageContext::Original);
+                    }
+                });
             }
 
             if (nextContinuation.isEmpty())
