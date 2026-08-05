@@ -49,8 +49,8 @@ constexpr int REDISCOVERY_RETRY_MS = 60000;
 // screen simultaneously, they're displayed one at a time with a delay based
 // on their real relative timestamps (clamped to this range) so they read
 // more like messages actually arriving.
-constexpr qint64 MIN_MESSAGE_STAGGER_MS = 150;
-constexpr qint64 MAX_MESSAGE_STAGGER_MS = 600;
+constexpr qint64 MIN_MESSAGE_STAGGER_MS = 300;
+constexpr qint64 MAX_MESSAGE_STAGGER_MS = 1000;
 
 constexpr int PAGE_FETCH_TIMEOUT_MS = 15000;
 constexpr int LIVE_CHAT_TIMEOUT_MS = 20000;
@@ -758,6 +758,7 @@ void YouTubeChannel::fetchChannelLivePage(const QString &handle)
             }
 
             self->setLive(true);
+            self->receivedFirstBatch_ = false;
             self->addSystemMessage(
                 u"YouTube: Live chat found for %1, connecting..."_s.arg(
                     self->videoId_));
@@ -831,6 +832,7 @@ void YouTubeChannel::fetchWatchPage()
             }
 
             self->setLive(true);
+            self->receivedFirstBatch_ = false;
             self->addSystemMessage(u"YouTube: Live chat found, connecting..."_s);
             self->fetchLiveChat(continuation);
         })
@@ -1079,42 +1081,73 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
                 pendingMessages.emplace_back(timestampUsec, builder.release());
             }
 
-            // Display the batch one message at a time, staggered by real
-            // relative timing (clamped), instead of all at once.
-            qint64 cumulativeDelayMs = 0;
-            qint64 prevTimestampUsec = 0;
-            bool firstMessage = true;
-            for (auto &[timestampUsec, msg] : pendingMessages)
+            // YouTube's actions array isn't reliably in chronological order
+            // (likely multiple chat shards merged without a strict global
+            // order) - sort so stagger deltas are never negative and
+            // fillInMissingMessages' ascending-order assumption holds.
+            std::stable_sort(pendingMessages.begin(), pendingMessages.end(),
+                             [](const auto &a, const auto &b) {
+                                 return a.first < b.first;
+                             });
+
+            if (!self->receivedFirstBatch_)
             {
-                if (firstMessage)
+                // The first poll of a connection is a catch-up batch of
+                // messages that already happened (chat history), not new
+                // arrivals. Use the same batch/history insert path Kick
+                // uses for its channel history backfill (fillInMissingMessages)
+                // instead of addMessage, so it's treated as history rather
+                // than a stream of live messages.
+                self->receivedFirstBatch_ = true;
+                std::vector<MessagePtr> historyMessages;
+                historyMessages.reserve(pendingMessages.size());
+                for (auto &pending : pendingMessages)
                 {
-                    self->addMessage(msg, MessageContext::Original);
-                    firstMessage = false;
-                    prevTimestampUsec = timestampUsec;
-                    continue;
+                    historyMessages.push_back(pending.second);
                 }
-
-                qint64 deltaMs = MIN_MESSAGE_STAGGER_MS;
-                if (timestampUsec > 0 && prevTimestampUsec > 0)
+                self->fillInMissingMessages(historyMessages);
+            }
+            else
+            {
+                // Later polls, though, can still bundle several seconds'
+                // worth of genuinely new messages into one batch - display
+                // those one at a time, staggered by real relative timing
+                // (clamped), instead of all at once.
+                qint64 cumulativeDelayMs = 0;
+                qint64 prevTimestampUsec = 0;
+                bool firstMessage = true;
+                for (auto &[timestampUsec, msg] : pendingMessages)
                 {
-                    deltaMs = (timestampUsec - prevTimestampUsec) / 1000;
-                }
-                deltaMs = std::clamp(deltaMs, MIN_MESSAGE_STAGGER_MS,
-                                     MAX_MESSAGE_STAGGER_MS);
-                cumulativeDelayMs += deltaMs;
-                if (timestampUsec > 0)
-                {
-                    prevTimestampUsec = timestampUsec;
-                }
-
-                QTimer::singleShot(cumulativeDelayMs, [weak, msg] {
-                    auto self =
-                        std::static_pointer_cast<YouTubeChannel>(weak.lock());
-                    if (self)
+                    if (firstMessage)
                     {
                         self->addMessage(msg, MessageContext::Original);
+                        firstMessage = false;
+                        prevTimestampUsec = timestampUsec;
+                        continue;
                     }
-                });
+
+                    qint64 deltaMs = MIN_MESSAGE_STAGGER_MS;
+                    if (timestampUsec > 0 && prevTimestampUsec > 0)
+                    {
+                        deltaMs = (timestampUsec - prevTimestampUsec) / 1000;
+                    }
+                    deltaMs = std::clamp(deltaMs, MIN_MESSAGE_STAGGER_MS,
+                                         MAX_MESSAGE_STAGGER_MS);
+                    cumulativeDelayMs += deltaMs;
+                    if (timestampUsec > 0)
+                    {
+                        prevTimestampUsec = timestampUsec;
+                    }
+
+                    QTimer::singleShot(cumulativeDelayMs, [weak, msg] {
+                        auto self = std::static_pointer_cast<YouTubeChannel>(
+                            weak.lock());
+                        if (self)
+                        {
+                            self->addMessage(msg, MessageContext::Original);
+                        }
+                    });
+                }
             }
 
             if (nextContinuation.isEmpty())

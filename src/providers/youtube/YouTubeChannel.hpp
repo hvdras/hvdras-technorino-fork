@@ -63,6 +63,12 @@ private:
     QString title_;
     QString thumbnailUrl_;
     bool live_ = false;
+    // True once the first fetchLiveChat() poll of a connection has been
+    // displayed. That first poll is a catch-up batch of messages that
+    // already happened, not new arrivals, so it's shown immediately rather
+    // than staggered like later polls. Reset whenever a new connection to a
+    // live chat starts.
+    bool receivedFirstBatch_ = false;
 
     pajlada::Signals::SignalHolder signalHolder_;
 };
