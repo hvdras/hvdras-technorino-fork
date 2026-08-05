@@ -40,6 +40,9 @@ constexpr int MIN_POLL_MS = 3000;
 constexpr int MAX_POLL_MS = 15000;
 constexpr int DEFAULT_POLL_MS = 5000;
 constexpr int ERROR_RETRY_MS = 10000;
+// How long to wait before checking again for a live stream, after one ends
+// or a channel handle isn't currently live.
+constexpr int REDISCOVERY_RETRY_MS = 60000;
 
 constexpr int PAGE_FETCH_TIMEOUT_MS = 15000;
 constexpr int LIVE_CHAT_TIMEOUT_MS = 20000;
@@ -147,6 +150,33 @@ QString extractApiKey(const QByteArray &body)
         return {};
     }
     return QString::fromUtf8(body.mid(idx, end - idx));
+}
+
+/// Extract the `content` attribute of a `<meta property="X" content="Y">`
+/// tag from page HTML (Open Graph title/image tags), decoding the handful
+/// of HTML entities YouTube commonly escapes into these attributes.
+QString extractMetaContent(const QByteArray &body, const QByteArray &property)
+{
+    const QByteArray marker = "property=\"" + property + "\" content=\"";
+    auto idx = body.indexOf(marker);
+    if (idx == -1)
+    {
+        return {};
+    }
+    idx += static_cast<int>(marker.size());
+    const auto end = body.indexOf('"', idx);
+    if (end == -1)
+    {
+        return {};
+    }
+
+    QString value = QString::fromUtf8(body.mid(idx, end - idx));
+    value.replace(u"&amp;"_s, u"&"_s);
+    value.replace(u"&quot;"_s, u"\""_s);
+    value.replace(u"&#39;"_s, u"'"_s);
+    value.replace(u"&lt;"_s, u"<"_s);
+    value.replace(u"&gt;"_s, u">"_s);
+    return value;
 }
 
 /// Parse ytInitialData JSON from page HTML.
@@ -577,12 +607,12 @@ void YouTubeChannel::initialize()
     else
     {
         // Treat as channel handle — ensure it has the @ prefix
-        const auto handle = nameOrHandle.startsWith(u'@')
-                                ? nameOrHandle
-                                : u'@' + nameOrHandle;
+        this->handle_ = nameOrHandle.startsWith(u'@')
+                            ? nameOrHandle
+                            : u'@' + nameOrHandle;
         this->addSystemMessage(
-            u"YouTube: Looking up live stream for %1..."_s.arg(handle));
-        this->fetchChannelLivePage(handle);
+            u"YouTube: Looking up live stream for %1..."_s.arg(this->handle_));
+        this->fetchChannelLivePage(this->handle_);
     }
 }
 
@@ -593,6 +623,16 @@ const QString &YouTubeChannel::videoId() const
     return this->videoId_;
 }
 
+const QString &YouTubeChannel::title() const
+{
+    return this->title_;
+}
+
+const QString &YouTubeChannel::thumbnailUrl() const
+{
+    return this->thumbnailUrl_;
+}
+
 bool YouTubeChannel::canSendMessage() const
 {
     return false;
@@ -601,6 +641,57 @@ bool YouTubeChannel::canSendMessage() const
 bool YouTubeChannel::isLive() const
 {
     return this->live_;
+}
+
+bool YouTubeChannel::canReconnect() const
+{
+    return true;
+}
+
+void YouTubeChannel::reconnect()
+{
+    if (this->handle_.isEmpty())
+    {
+        this->addSystemMessage(u"YouTube: Reconnecting..."_s);
+        this->fetchWatchPage();
+    }
+    else
+    {
+        this->addSystemMessage(
+            u"YouTube: Looking up live stream for %1..."_s.arg(
+                this->handle_));
+        this->fetchChannelLivePage(this->handle_);
+    }
+}
+
+void YouTubeChannel::setLive(bool live)
+{
+    if (this->live_ == live)
+    {
+        return;
+    }
+    this->live_ = live;
+    this->liveStatusChanged.invoke();
+}
+
+void YouTubeChannel::scheduleRediscovery()
+{
+    auto weak = this->weak_from_this();
+    QTimer::singleShot(REDISCOVERY_RETRY_MS, [weak] {
+        auto self = std::static_pointer_cast<YouTubeChannel>(weak.lock());
+        if (!self)
+        {
+            return;
+        }
+        if (self->handle_.isEmpty())
+        {
+            self->fetchWatchPage();
+        }
+        else
+        {
+            self->fetchChannelLivePage(self->handle_);
+        }
+    });
 }
 
 void YouTubeChannel::fetchChannelLivePage(const QString &handle)
@@ -636,12 +727,15 @@ void YouTubeChannel::fetchChannelLivePage(const QString &handle)
             }
 
             self->apiKey_ = extractApiKey(body);
+            self->title_ = extractMetaContent(body, "og:title");
+            self->thumbnailUrl_ = extractMetaContent(body, "og:image");
 
             const auto doc = extractYtInitialData(body);
             if (doc.isNull())
             {
                 self->addSystemMessage(
-                    u"YouTube: Channel is not live."_s);
+                    u"YouTube: Channel is not live. Will keep checking..."_s);
+                self->scheduleRediscovery();
                 return;
             }
 
@@ -650,11 +744,12 @@ void YouTubeChannel::fetchChannelLivePage(const QString &handle)
             if (continuation.isEmpty())
             {
                 self->addSystemMessage(
-                    u"YouTube: Channel is not currently live."_s);
+                    u"YouTube: Channel is not currently live. Will keep checking..."_s);
+                self->scheduleRediscovery();
                 return;
             }
 
-            self->live_ = true;
+            self->setLive(true);
             self->addSystemMessage(
                 u"YouTube: Live chat found for %1, connecting..."_s.arg(
                     self->videoId_));
@@ -671,8 +766,16 @@ void YouTubeChannel::fetchChannelLivePage(const QString &handle)
                 << "Failed to fetch channel live page:"
                 << result.formatError();
             self->addSystemMessage(
-                u"YouTube: Failed to load channel (%1)."_s.arg(
+                u"YouTube: Failed to load channel (%1). Retrying..."_s.arg(
                     result.formatError()));
+            QTimer::singleShot(ERROR_RETRY_MS, [weak] {
+                auto self =
+                    std::static_pointer_cast<YouTubeChannel>(weak.lock());
+                if (self)
+                {
+                    self->fetchChannelLivePage(self->handle_);
+                }
+            });
         })
         .execute();
 }
@@ -697,12 +800,15 @@ void YouTubeChannel::fetchWatchPage()
             const auto &body = result.getData();
 
             self->apiKey_ = extractApiKey(body);
+            self->title_ = extractMetaContent(body, "og:title");
+            self->thumbnailUrl_ = extractMetaContent(body, "og:image");
 
             const auto doc = extractYtInitialData(body);
             if (doc.isNull())
             {
                 self->addSystemMessage(
-                    u"YouTube: No live chat data found. Is this an active live stream?"_s);
+                    u"YouTube: No live chat data found. Will keep checking..."_s);
+                self->scheduleRediscovery();
                 return;
             }
 
@@ -711,11 +817,12 @@ void YouTubeChannel::fetchWatchPage()
             if (continuation.isEmpty())
             {
                 self->addSystemMessage(
-                    u"YouTube: No live chat available. The stream may not be live."_s);
+                    u"YouTube: No live chat available. Will keep checking..."_s);
+                self->scheduleRediscovery();
                 return;
             }
 
-            self->live_ = true;
+            self->setLive(true);
             self->addSystemMessage(u"YouTube: Live chat found, connecting..."_s);
             self->fetchLiveChat(continuation);
         })
@@ -817,9 +924,10 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
                 qCWarning(chatterinoYoutube)
                     << "No liveChatContinuation in response";
                 // Stream may have ended
-                self->live_ = false;
+                self->setLive(false);
                 self->addSystemMessage(
-                    u"YouTube: Live chat ended."_s);
+                    u"YouTube: Live chat ended. Will keep checking for a new stream..."_s);
+                self->scheduleRediscovery();
                 return;
             }
 
@@ -900,8 +1008,12 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
                     continue;
                 }
 
-                const QString authorName =
+                QString authorName =
                     renderer["authorName"].toObject()["simpleText"].toString();
+                if (authorName.startsWith(u'@'))
+                {
+                    authorName.remove(0, 1);
+                }
                 const auto messageRuns =
                     renderer["message"].toObject()["runs"].toArray();
                 const QString messageText = runsToText(messageRuns);
@@ -960,8 +1072,10 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
 
             if (nextContinuation.isEmpty())
             {
-                self->live_ = false;
-                self->addSystemMessage(u"YouTube: Live chat ended."_s);
+                self->setLive(false);
+                self->addSystemMessage(
+                    u"YouTube: Live chat ended. Will keep checking for a new stream..."_s);
+                self->scheduleRediscovery();
                 return;
             }
 

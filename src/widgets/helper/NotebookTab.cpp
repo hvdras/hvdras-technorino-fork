@@ -16,6 +16,7 @@
 #include "singletons/WindowManager.hpp"
 #include "util/Helpers.hpp"
 #include "widgets/dialogs/SettingsDialog.hpp"
+#include "widgets/helper/CommonTexts.hpp"
 #include "widgets/Notebook.hpp"
 #include "widgets/splits/DraggedSplit.hpp"
 #include "widgets/splits/Split.hpp"
@@ -208,6 +209,13 @@ NotebookTab::NotebookTab(Notebook *notebook)
 
     this->menu_.addAction("Duplicate Tab", [this]() {
         this->notebook_->duplicatePage(this->page);
+    });
+
+    this->menu_.addAction(OPEN_IN_BROWSER, [this]() {
+        if (auto *split = previewSplitFor(this->page))
+        {
+            split->openInBrowser();
+        }
     });
 
     this->highlightNewMessagesAction_ =

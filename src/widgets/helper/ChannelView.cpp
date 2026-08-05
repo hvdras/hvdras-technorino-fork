@@ -31,6 +31,7 @@
 #include "providers/twitch/TwitchAccount.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
+#include "providers/youtube/YouTubeChannel.hpp"
 #include "singletons/Resources.hpp"
 #include "singletons/Settings.hpp"
 #include "singletons/StreamerMode.hpp"
@@ -1242,6 +1243,13 @@ void ChannelView::setChannel(const ChannelPtr &underlyingChannel)
         {
             this->channelConnections_.managedConnect(
                 kickChannel->liveStatusChanged, [this] {
+                    this->liveStatusChanged.invoke();
+                });
+        }
+        else if (auto *youtubeChannel = dynamic_cast<YouTubeChannel *>(chan))
+        {
+            this->channelConnections_.managedConnect(
+                youtubeChannel->liveStatusChanged, [this] {
                     this->liveStatusChanged.invoke();
                 });
         }

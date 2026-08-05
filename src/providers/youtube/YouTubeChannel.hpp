@@ -6,6 +6,7 @@
 
 #include "common/Channel.hpp"
 
+#include <pajlada/signals/signal.hpp>
 #include <pajlada/signals/signalholder.hpp>
 #include <QString>
 
@@ -27,17 +28,40 @@ public:
 
     const QString &videoId() const;
 
+    /// The stream's title, if known. Populated once when the watch/live page
+    /// is first fetched; not kept up to date afterwards.
+    const QString &title() const;
+    /// URL of the stream's thumbnail image, if known. Same freshness caveat
+    /// as title().
+    const QString &thumbnailUrl() const;
+
     bool canSendMessage() const override;
     bool isLive() const override;
+    bool canReconnect() const override;
+    void reconnect() override;
+
+    /// Fired whenever isLive() changes, so the tab's live indicator updates.
+    pajlada::Signals::NoArgSignal liveStatusChanged;
 
 private:
     void fetchChannelLivePage(const QString &handle);
     void fetchWatchPage();
     void fetchLiveChat(const QString &continuation);
     void scheduleNextPoll(const QString &continuation, int timeoutMs);
+    void setLive(bool live);
+    /// Called when the chat/stream we were watching ends (or a handle
+    /// lookup finds nobody currently live). Schedules another attempt to
+    /// find a live stream instead of giving up permanently.
+    void scheduleRediscovery();
 
     QString videoId_;
+    // Non-empty if this channel was opened via a channel handle (e.g.
+    // "@somechannel") rather than a fixed video ID. Used to re-search for a
+    // new live stream after one ends.
+    QString handle_;
     QString apiKey_;
+    QString title_;
+    QString thumbnailUrl_;
     bool live_ = false;
 
     pajlada::Signals::SignalHolder signalHolder_;

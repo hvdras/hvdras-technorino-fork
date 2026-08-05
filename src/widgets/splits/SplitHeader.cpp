@@ -19,6 +19,7 @@
 #include "providers/twitch/TwitchAccount.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
+#include "providers/youtube/YouTubeChannel.hpp"
 #include "singletons/Settings.hpp"
 #include "singletons/StreamerMode.hpp"
 #include "singletons/Theme.hpp"
@@ -283,6 +284,18 @@ TwitchChannel::StreamStatus toTwitchStreamStatus(
         .title = data.title,
         .game = data.category,
         .uptime = data.uptime,
+        .streamType = QStringLiteral("live"),
+    };
+}
+
+TwitchChannel::StreamStatus toTwitchStreamStatus(
+    const YouTubeChannel &youtubeChannel)
+{
+    // YouTube's unofficial API doesn't give us viewer count/uptime/category
+    // the way Twitch and Kick do, so those are left at their defaults.
+    return {
+        .live = youtubeChannel.isLive(),
+        .title = youtubeChannel.title(),
         .streamType = QStringLiteral("live"),
     };
 }
@@ -593,6 +606,15 @@ std::unique_ptr<QMenu> SplitHeader::createMainMenu()
             });
         }
 
+        menu->addSeparator();
+    }
+
+    if (dynamic_cast<YouTubeChannel *>(selected.get()))
+    {
+        menu->addAction(
+            OPEN_IN_BROWSER,
+            h->getDisplaySequence(HotkeyCategory::Split, "openInBrowser"),
+            this->split_, &Split::openInBrowser);
         menu->addSeparator();
     }
 
@@ -1139,6 +1161,39 @@ void SplitHeader::updateChannelText()
                  this->lastThumbnail_.elapsed() > THUMBNAIL_MAX_AGE_MS))
             {
                 NetworkRequest(stream.thumbnailUrl, NetworkRequestType::Get)
+                    .caller(this)
+                    .followRedirects(true)
+                    .onSuccess([this](const auto &result) {
+                        assert(!isAppAboutToQuit());
+
+                        this->thumbnail_ =
+                            QString::fromLatin1(result.getData().toBase64());
+                        this->updateChannelText();
+                    })
+                    .execute();
+                this->lastThumbnail_.restart();
+            }
+            this->tooltipText_ = formatTooltip(twitch, this->thumbnail_, true);
+            title += formatTitle(twitch, *getSettings(), {});
+        }
+        else
+        {
+            this->tooltipText_ = formatOfflineTooltip(twitch);
+        }
+    }
+    else if (auto *youtubeChannel =
+                 dynamic_cast<YouTubeChannel *>(selectedChannel.get()))
+    {
+        auto twitch = toTwitchStreamStatus(*youtubeChannel);
+        if (twitch.live)
+        {
+            this->isLive_ = true;
+            const auto &thumbnailUrl = youtubeChannel->thumbnailUrl();
+            if (!thumbnailUrl.isEmpty() &&
+                (!this->lastThumbnail_.isValid() ||
+                 this->lastThumbnail_.elapsed() > THUMBNAIL_MAX_AGE_MS))
+            {
+                NetworkRequest(thumbnailUrl, NetworkRequestType::Get)
                     .caller(this)
                     .followRedirects(true)
                     .onSuccess([this](const auto &result) {

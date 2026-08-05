@@ -18,6 +18,7 @@
 #include "providers/twitch/TwitchBadges.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
+#include "providers/youtube/YouTubeChannel.hpp"
 #include "singletons/Fonts.hpp"
 #include "singletons/ImageUploader.hpp"
 #include "singletons/Settings.hpp"
@@ -1442,6 +1443,11 @@ void Split::openInBrowser()
     else if (auto *kc = dynamic_cast<KickChannel *>(channel.get()))
     {
         QDesktopServices::openUrl("https://kick.com/" + kc->slug());
+    }
+    else if (auto *ytChannel = dynamic_cast<YouTubeChannel *>(channel.get()))
+    {
+        QDesktopServices::openUrl("https://www.youtube.com/watch?v=" +
+                                  ytChannel->videoId());
     }
 }
 
