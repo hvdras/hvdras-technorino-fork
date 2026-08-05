@@ -49,8 +49,8 @@ constexpr int REDISCOVERY_RETRY_MS = 60000;
 // screen simultaneously, they're displayed one at a time with a delay based
 // on their real relative timestamps (clamped to this range) so they read
 // more like messages actually arriving.
-constexpr qint64 MIN_MESSAGE_STAGGER_MS = 50;
-constexpr qint64 MAX_MESSAGE_STAGGER_MS = 500;
+constexpr qint64 MIN_MESSAGE_STAGGER_MS = 150;
+constexpr qint64 MAX_MESSAGE_STAGGER_MS = 600;
 
 constexpr int PAGE_FETCH_TIMEOUT_MS = 15000;
 constexpr int LIVE_CHAT_TIMEOUT_MS = 20000;
