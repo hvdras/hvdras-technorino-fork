@@ -8,16 +8,23 @@
 
 namespace chatterino {
 
-std::shared_ptr<Channel> YouTubeChatServer::getOrCreate(
-    const QString &videoId)
+std::shared_ptr<YouTubeChannel> YouTubeChatServer::find(
+    const QString &videoId) const
 {
     auto it = this->channelsByVideoId_.find(videoId);
     if (it != this->channelsByVideoId_.end())
     {
-        if (auto existing = it->second.lock())
-        {
-            return existing;
-        }
+        return it->second.lock();
+    }
+    return nullptr;
+}
+
+std::shared_ptr<Channel> YouTubeChatServer::getOrCreate(
+    const QString &videoId)
+{
+    if (auto existing = this->find(videoId))
+    {
+        return existing;
     }
 
     auto chan = std::make_shared<YouTubeChannel>(videoId);

@@ -32,6 +32,7 @@
 #include "providers/twitch/TwitchChannel.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
 #include "providers/youtube/YouTubeChannel.hpp"
+#include "providers/youtube/YouTubeChatServer.hpp"
 #include "singletons/Resources.hpp"
 #include "singletons/Settings.hpp"
 #include "singletons/StreamerMode.hpp"
@@ -3345,9 +3346,16 @@ void ChannelView::showUserInfoPopup(const QString &userName,
     }
     else if (openingChannel && platform == MessagePlatform::YouTube)
     {
-        // YouTube has no shared-chat/multi-channel merging, so the message
-        // always came from the channel that's already open.
-        contextChannel = openingChannel;
+        // openingChannel may be a MultiChannel wrapper rather than the
+        // actual YouTubeChannel the message came from (e.g. Twitch as the
+        // main channel with YouTube merged in) - look the real channel up
+        // by name instead of assuming openingChannel is it.
+        contextChannel =
+            getApp()->getYouTubeChatServer()->find(alternativePopoutChannel);
+        if (!contextChannel)
+        {
+            contextChannel = Channel::getEmpty();
+        }
     }
     else
     {
