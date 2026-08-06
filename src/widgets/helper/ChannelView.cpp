@@ -1623,7 +1623,8 @@ MessageElementFlags ChannelView::getFlags() const
         }
         if (getSettings()->enableRepeatedMessageDetector &&
             (!getSettings()->repeatedMessagesShowOnlyModerationMode ||
-             split->getModerationMode()))
+             split->getModerationMode()) &&
+            !getApp()->getStreamerMode()->shouldHideRepeatedMessages())
         {
             flags.set(MessageElementFlag::RepeatedMessageCounter);
         }
@@ -1641,7 +1642,8 @@ MessageElementFlags ChannelView::getFlags() const
 
     if (this->context_ == Context::UserCard &&
         getSettings()->enableRepeatedMessageDetector &&
-        getSettings()->repeatedMessagesShowInUsercards)
+        getSettings()->repeatedMessagesShowInUsercards &&
+        !getApp()->getStreamerMode()->shouldHideRepeatedMessages())
     {
         flags.set(MessageElementFlag::RepeatedMessageCounter);
     }
@@ -3340,6 +3342,12 @@ void ChannelView::showUserInfoPopup(const QString &userName,
         {
             contextChannel = Channel::getEmpty();
         }
+    }
+    else if (openingChannel && platform == MessagePlatform::YouTube)
+    {
+        // YouTube has no shared-chat/multi-channel merging, so the message
+        // always came from the channel that's already open.
+        contextChannel = openingChannel;
     }
     else
     {

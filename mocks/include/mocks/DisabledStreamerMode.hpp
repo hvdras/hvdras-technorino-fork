@@ -20,6 +20,11 @@ public:
         return false;
     }
 
+    bool shouldHideRepeatedMessages() const override
+    {
+        return false;
+    }
+
     void start() override
     {
     }

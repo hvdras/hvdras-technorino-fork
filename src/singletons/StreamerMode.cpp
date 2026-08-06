@@ -226,6 +226,12 @@ bool StreamerMode::shouldHideRestrictedUsers() const
     return getSettings()->streamerModeHideRestrictedUsers && this->isEnabled();
 }
 
+bool StreamerMode::shouldHideRepeatedMessages() const
+{
+    return getSettings()->streamerModeHideRepeatedMessages &&
+           this->isEnabled();
+}
+
 void StreamerMode::start()
 {
     this->private_->start();

@@ -1113,11 +1113,12 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
                     builder.emplace<BadgeElement>(emote, flag);
                 }
 
-                builder.emplace<TextElement>(
-                    authorName + ':',
-                    MessageElementFlags{MessageElementFlag::Username},
-                    MessageColor{YOUTUBE_RED},
-                    FontStyle::ChatMediumBold);
+                builder
+                    .emplace<TextElement>(
+                        authorName + ':',
+                        MessageElementFlags{MessageElementFlag::Username},
+                        MessageColor{YOUTUBE_RED}, FontStyle::ChatMediumBold)
+                    ->setLink({Link::UserInfo, authorName});
 
                 appendMessageRuns(builder, messageRuns);
 

@@ -72,6 +72,10 @@ private:
 
     void updateKickUserData();
     void onKickProfilePictureClick(Qt::MouseButton button);
+    /// YouTube's unauthenticated live chat has no user-profile API, so this
+    /// just shows "Unavailable" for anything we can't derive locally, plus
+    /// whatever channel id we've already captured from their messages.
+    void updateYouTubeUserData();
 
     QStringView platformName() const;
 
@@ -148,6 +152,10 @@ private:
 
     bool isKick_ = false;
     uint64_t kickUserID_ = 0;
+    bool isYouTube_ = false;
+    /// The channel id captured locally from their messages
+    /// (authorExternalChannelId) - there's no API to look it up otherwise.
+    QString youtubeChannelId_;
 
     class TimeoutWidget : public BaseWidget
     {

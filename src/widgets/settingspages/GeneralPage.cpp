@@ -767,6 +767,12 @@ void GeneralPage::initLayout(GeneralPageView &layout)
         ->setTooltip("Hide user notes from showing in usercards.")
         ->addTo(layout);
 
+    SettingWidget::checkbox("Hide repeated-message counters",
+                            s.streamerModeHideRepeatedMessages)
+        ->setTooltip("Hide the x2, x3, ... repeated-message counters from "
+                     "appearing in chat and usercards.")
+        ->addTo(layout);
+
     SettingWidget::checkbox("Mute mention sounds", s.streamerModeMuteMentions)
         ->setTooltip("Mute your ping sound from playing.")
         ->addTo(layout);

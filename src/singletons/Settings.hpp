@@ -525,6 +525,10 @@ public:
         "/streamerMode/hideUserNotes",
         true,
     };
+    BoolSetting streamerModeHideRepeatedMessages = {
+        "/streamerMode/hideRepeatedMessages",
+        true,
+    };
 
     /// Blocked Users
     BoolSetting enableTwitchBlockedUsers = {"/ignore/enableTwitchBlockedUsers",
@@ -887,14 +891,14 @@ public:
     BoolSetting hideEmojiButton{"/misc/hideEmojiButton", false};
 
     // -- Miscellaneous --
-    BoolSetting colorTabHighlightsByMessage{"/misc/colorTabHighlightsByMessage", true};
+    BoolSetting colorTabHighlightsByMessage{"/misc/colorTabHighlightsByMessage", false};
     BoolSetting hideModActionsOnModUsercards{"/misc/hideModActionsOnModUsercards", true};
     BoolSetting showModActionsOnModUsercardsAsLeadMod{"/usercard/showModActionsOnModUsercardsAsLeadMod", false};
 
     // -- Repeated Message Detector --
-    BoolSetting enableRepeatedMessageDetector{"/moltorino/moderation/repeatedMessages/enabled", true};
+    BoolSetting enableRepeatedMessageDetector{"/moltorino/moderation/repeatedMessages/enabled", false};
     BoolSetting repeatedMessagesShowOnlyModerationMode{"/moltorino/moderation/repeatedMessages/showOnlyModerationMode", true};
-    BoolSetting repeatedMessagesShowInUsercards{"/moltorino/moderation/repeatedMessages/showInUsercards", true};
+    BoolSetting repeatedMessagesShowInUsercards{"/moltorino/moderation/repeatedMessages/showInUsercards", false};
     BoolSetting repeatedMessagesOnlyModChannels{"/moltorino/moderation/repeatedMessages/onlyModChannels", true};
     BoolSetting repeatedMessagesIgnoreVips{"/moltorino/moderation/repeatedMessages/ignoreVips", false};
     IntSetting repeatedMessagesSensitivity{"/moltorino/moderation/repeatedMessages/sensitivity", 2};

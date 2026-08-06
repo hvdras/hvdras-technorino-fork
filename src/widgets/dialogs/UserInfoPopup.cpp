@@ -315,6 +315,18 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
                     return;
                 }
 
+                if (this->isYouTube_)
+                {
+                    if (button == Qt::LeftButton &&
+                        !this->youtubeChannelId_.isEmpty())
+                    {
+                        QDesktopServices::openUrl(
+                            "https://www.youtube.com/channel/" +
+                            this->youtubeChannelId_);
+                    }
+                    return;
+                }
+
                 QUrl channelURL("https://www.twitch.tv/" +
                                 this->userName_.toLower());
 
@@ -981,6 +993,8 @@ void UserInfoPopup::setData(const QString &name,
     this->setWindowTitle(
         TEXT_TITLE.arg(name, this->underlyingChannel_->getName()));
     this->isKick_ = this->underlyingChannel_->getType() == Channel::Type::Kick;
+    this->isYouTube_ =
+        this->underlyingChannel_->getType() == Channel::Type::YouTube;
     if (this->isKick_)
     {
         this->ui_.timeoutWidget->setMinTimeout(60);
@@ -992,6 +1006,14 @@ void UserInfoPopup::setData(const QString &name,
     if (this->isKick_)
     {
         this->updateKickUserData();
+        if (this->ui_.pronounsLabel)
+        {
+            this->ui_.pronounsLabel->hide();
+        }
+    }
+    else if (this->isYouTube_)
+    {
+        this->updateYouTubeUserData();
         if (this->ui_.pronounsLabel)
         {
             this->ui_.pronounsLabel->hide();
@@ -1052,7 +1074,7 @@ void UserInfoPopup::setData(const QString &name,
     auto type = this->channel_->getType();
     if (type == Channel::Type::TwitchLive ||
         type == Channel::Type::TwitchWhispers || type == Channel::Type::Misc ||
-        type == Channel::Type::Kick)
+        type == Channel::Type::Kick || type == Channel::Type::YouTube)
     {
         // not a normal twitch channel, the url opened by the button will be invalid, so hide the button
         this->ui_.usercardLabel->hide();
@@ -1747,6 +1769,61 @@ void UserInfoPopup::updateKickUserData()
     this->ui_.ignoreHighlights->setVisible(!isMyself);
 }
 
+void UserInfoPopup::updateYouTubeUserData()
+{
+    assert(this->isYouTube_);
+
+    // YouTube's unauthenticated live chat API has no user-profile endpoint
+    // to call, so everything here is either "Unavailable" or derived from
+    // data we've already captured locally off their messages.
+    this->ui_.followerCountLabel->setText(
+        TEXT_FOLLOWERS.arg(TEXT_UNAVAILABLE));
+    this->ui_.createdDateLabel->setText(TEXT_CREATED.arg(TEXT_UNAVAILABLE));
+
+    this->ui_.nameLabel->setText(this->userName_);
+    this->ui_.nameLabel->setProperty("copy-text", this->userName_);
+
+    this->youtubeChannelId_.clear();
+    if (this->underlyingChannel_)
+    {
+        for (const auto &message :
+             this->underlyingChannel_->getMessageSnapshot())
+        {
+            if (message != nullptr &&
+                !message->userID.isEmpty() &&
+                message->loginName.compare(this->userName_,
+                                           Qt::CaseInsensitive) == 0)
+            {
+                this->youtubeChannelId_ = message->userID;
+                break;
+            }
+        }
+    }
+
+    if (this->youtubeChannelId_.isEmpty())
+    {
+        this->ui_.userIDLabel->setText(u"ID " % TEXT_UNAVAILABLE);
+        this->ui_.userIDLabel->setProperty("copy-text",
+                                           TEXT_UNAVAILABLE.toString());
+    }
+    else
+    {
+        this->ui_.userIDLabel->setText(TEXT_USER_ID % this->youtubeChannelId_);
+        this->ui_.userIDLabel->setProperty("copy-text",
+                                           this->youtubeChannelId_);
+    }
+
+    this->ui_.avatarButton->setPixmap(getResources().streamerMode);
+    this->ui_.followageLabel->hide();
+    this->ui_.subageLabel->hide();
+    this->ui_.liveIndicator->hide();
+
+    // No moderation/ignore/notes API exists for YouTube.
+    this->ui_.block->setEnabled(false);
+    this->ui_.ignoreHighlights->setEnabled(false);
+    this->ui_.notesAdd->setEnabled(false);
+}
+
 void UserInfoPopup::onKickProfilePictureClick(Qt::MouseButton button)
 {
     assert(this->isKick_);
@@ -1827,6 +1904,10 @@ QStringView UserInfoPopup::platformName() const
     if (this->isKick_)
     {
         return u"Kick";
+    }
+    if (this->isYouTube_)
+    {
+        return u"YouTube";
     }
     return u"Twitch";
 }

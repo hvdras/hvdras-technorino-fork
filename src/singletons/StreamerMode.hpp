@@ -30,6 +30,9 @@ public:
     /// Returns true if streamer mode is enabled & the settings to hide messages from restricted users is enabled
     [[nodiscard]] virtual bool shouldHideRestrictedUsers() const = 0;
 
+    /// Returns true if streamer mode is enabled & the setting to hide repeated-message counters is enabled
+    [[nodiscard]] virtual bool shouldHideRepeatedMessages() const = 0;
+
     virtual void start() = 0;
 
 Q_SIGNALS:
@@ -51,6 +54,7 @@ public:
 
     bool shouldHideModActions() const override;
     bool shouldHideRestrictedUsers() const override;
+    bool shouldHideRepeatedMessages() const override;
 
     void start() override;
 
