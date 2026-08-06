@@ -167,6 +167,34 @@ QString extractApiKey(const QByteArray &body)
     return QString::fromUtf8(body.mid(idx, end - idx));
 }
 
+/// Extract the video owner channel's canonical URL path (e.g. "@somehandle"
+/// or "channel/UCxxxx") from a watch page's browseEndpoint data, so a video
+/// opened by a fixed video ID can still fall back to following that
+/// channel's next live stream once this one ends.
+QString extractChannelPath(const QByteArray &body)
+{
+    static const QByteArray MARKER = "\"canonicalBaseUrl\":\"";
+    auto idx = body.indexOf(MARKER);
+    if (idx == -1)
+    {
+        return {};
+    }
+    idx += static_cast<int>(MARKER.size());
+    const auto end = body.indexOf('"', idx);
+    if (end == -1)
+    {
+        return {};
+    }
+
+    QString path = QString::fromUtf8(body.mid(idx, end - idx));
+    path.replace(u"\\/"_s, u"/"_s);
+    if (path.startsWith(u'/'))
+    {
+        path.remove(0, 1);
+    }
+    return path;
+}
+
 /// Extract the `content` attribute of a `<meta property="X" content="Y">`
 /// tag from page HTML (Open Graph title/image tags), decoding the handful
 /// of HTML entities YouTube commonly escapes into these attributes.
@@ -818,6 +846,14 @@ void YouTubeChannel::fetchWatchPage()
             self->apiKey_ = extractApiKey(body);
             self->title_ = extractMetaContent(body, "og:title");
             self->thumbnailUrl_ = extractMetaContent(body, "og:image");
+            if (self->handle_.isEmpty())
+            {
+                // Learn the owning channel's path so that once this video's
+                // stream ends, rediscovery/reconnect can search for a new
+                // live stream on the same channel instead of only ever
+                // re-checking this one dead video.
+                self->handle_ = extractChannelPath(body);
+            }
 
             const auto doc = extractYtInitialData(body);
             if (doc.isNull())

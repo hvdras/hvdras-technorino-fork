@@ -55,9 +55,11 @@ private:
     void scheduleRediscovery();
 
     QString videoId_;
-    // Non-empty if this channel was opened via a channel handle (e.g.
-    // "@somechannel") rather than a fixed video ID. Used to re-search for a
-    // new live stream after one ends.
+    // The owning channel's path (e.g. "@somechannel" or "channel/UCxxxx").
+    // Set immediately if this channel was opened via a handle; otherwise
+    // learned from the video's watch page once it's fetched. Used to
+    // re-search for a new live stream on the same channel after one ends,
+    // instead of only ever re-checking a single dead video.
     QString handle_;
     QString apiKey_;
     QString title_;
