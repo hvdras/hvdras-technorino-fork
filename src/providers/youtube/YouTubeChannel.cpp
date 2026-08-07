@@ -54,6 +54,8 @@ constexpr int REDISCOVERY_RETRY_MS = 60000;
 
 constexpr int PAGE_FETCH_TIMEOUT_MS = 15000;
 constexpr int LIVE_CHAT_TIMEOUT_MS = 20000;
+// How often to refresh the tab tooltip's viewer count/uptime while live.
+constexpr int STATS_REFRESH_MS = 60000;
 
 // Innertube client context sent with every request.
 // clientVersion follows YouTube's YYYY-MMDD.HH.MM format.
@@ -230,26 +232,27 @@ QString extractMetaContent(const QByteArray &body, const QByteArray &property)
     return value;
 }
 
-/// Parse ytInitialData JSON from page HTML.
+/// Parse a `var <varName> = {...};` inline JSON blob from page HTML.
 /// Returns the JSON document, or null if not found / parse failed.
-QJsonDocument extractYtInitialData(const QByteArray &body)
+QJsonDocument extractInlineJson(const QByteArray &body,
+                                const QByteArray &varName)
 {
-    static const QByteArray MARKER1 = "var ytInitialData = ";
-    static const QByteArray MARKER2 = "ytInitialData = ";
+    const QByteArray marker1 = "var " + varName + " = ";
+    const QByteArray marker2 = varName + " = ";
 
-    int idx = body.indexOf(MARKER1);
+    int idx = body.indexOf(marker1);
     if (idx != -1)
     {
-        idx += static_cast<int>(MARKER1.size());
+        idx += static_cast<int>(marker1.size());
     }
     else
     {
-        idx = body.indexOf(MARKER2);
+        idx = body.indexOf(marker2);
         if (idx == -1)
         {
             return {};
         }
-        idx += static_cast<int>(MARKER2.size());
+        idx += static_cast<int>(marker2.size());
     }
 
     auto endIdx = body.indexOf(";</script>", idx);
@@ -263,6 +266,18 @@ QJsonDocument extractYtInitialData(const QByteArray &body)
     }
 
     return QJsonDocument::fromJson(body.mid(idx, endIdx - idx));
+}
+
+QJsonDocument extractYtInitialData(const QByteArray &body)
+{
+    return extractInlineJson(body, "ytInitialData");
+}
+
+/// ytInitialPlayerResponse carries stream metadata ytInitialData doesn't,
+/// like the broadcast's actual start time.
+QJsonDocument extractYtInitialPlayerResponse(const QByteArray &body)
+{
+    return extractInlineJson(body, "ytInitialPlayerResponse");
 }
 
 /// Extract text from a YouTube "runs" array (list of text/emoji run objects).
@@ -875,6 +890,16 @@ const QString &YouTubeChannel::thumbnailUrl() const
     return this->thumbnailUrl_;
 }
 
+unsigned YouTubeChannel::viewerCount() const
+{
+    return this->viewerCount_;
+}
+
+const QDateTime &YouTubeChannel::streamStartedAt() const
+{
+    return this->streamStartedAt_;
+}
+
 bool YouTubeChannel::canSendMessage() const
 {
     return false;
@@ -1128,6 +1153,68 @@ void YouTubeChannel::setLive(bool live)
     }
     this->live_ = live;
     this->liveStatusChanged.invoke();
+    if (live)
+    {
+        this->scheduleStatsRefresh();
+    }
+}
+
+void YouTubeChannel::scheduleStatsRefresh()
+{
+    auto weak = this->weak_from_this();
+    QTimer::singleShot(STATS_REFRESH_MS, [weak] {
+        auto self = std::static_pointer_cast<YouTubeChannel>(weak.lock());
+        if (!self || !self->live_)
+        {
+            // Stream ended (or channel closed) - stop rescheduling.
+            return;
+        }
+        self->refreshStreamStats();
+        self->scheduleStatsRefresh();
+    });
+}
+
+void YouTubeChannel::refreshStreamStats()
+{
+    if (this->videoId_.isEmpty())
+    {
+        return;
+    }
+
+    auto weak = this->weak_from_this();
+    NetworkRequest(u"https://www.youtube.com/watch?v=%1"_s.arg(this->videoId_))
+        .header("User-Agent", USER_AGENT)
+        .header("Accept-Language", "en-US,en;q=0.9")
+        .followRedirects(true)
+        .timeout(PAGE_FETCH_TIMEOUT_MS)
+        .onSuccess([weak](const NetworkResult &result) {
+            auto self = std::static_pointer_cast<YouTubeChannel>(weak.lock());
+            if (!self)
+            {
+                return;
+            }
+
+            const auto &body = result.getData();
+            auto doc = extractYtInitialData(body);
+            if (!doc.isNull())
+            {
+                self->viewerCount_ =
+                    findKey(doc.object(), u"originalViewCount"_s).toUInt();
+            }
+            if (!self->streamStartedAt_.isValid())
+            {
+                self->streamStartedAt_ = QDateTime::fromString(
+                    findKey(extractYtInitialPlayerResponse(body).object(),
+                           u"startTimestamp"_s),
+                    Qt::ISODate);
+            }
+            self->streamStatusChanged.invoke();
+        })
+        .onError([](const NetworkResult & /*result*/) {
+            // Silent - this is a periodic cosmetic refresh, not worth a
+            // system message every time it has a hiccup.
+        })
+        .execute();
 }
 
 void YouTubeChannel::scheduleRediscovery()
@@ -1204,6 +1291,13 @@ void YouTubeChannel::fetchChannelLivePage(const QString &handle)
                 self->scheduleRediscovery();
                 return;
             }
+
+            self->viewerCount_ =
+                findKey(doc.object(), u"originalViewCount"_s).toUInt();
+            self->streamStartedAt_ = QDateTime::fromString(
+                findKey(extractYtInitialPlayerResponse(body).object(),
+                       u"startTimestamp"_s),
+                Qt::ISODate);
 
             self->setLive(true);
             self->receivedFirstBatch_ = false;
@@ -1291,6 +1385,13 @@ void YouTubeChannel::fetchWatchPage()
                 self->scheduleRediscovery();
                 return;
             }
+
+            self->viewerCount_ =
+                findKey(doc.object(), u"originalViewCount"_s).toUInt();
+            self->streamStartedAt_ = QDateTime::fromString(
+                findKey(extractYtInitialPlayerResponse(body).object(),
+                       u"startTimestamp"_s),
+                Qt::ISODate);
 
             self->setLive(true);
             self->receivedFirstBatch_ = false;

@@ -291,11 +291,26 @@ TwitchChannel::StreamStatus toTwitchStreamStatus(
 TwitchChannel::StreamStatus toTwitchStreamStatus(
     const YouTubeChannel &youtubeChannel)
 {
-    // YouTube's unofficial API doesn't give us viewer count/uptime/category
-    // the way Twitch and Kick do, so those are left at their defaults.
+    // YouTube's unofficial API doesn't give us a category the way Twitch
+    // and Kick do, so that's left at its default - but viewer count and
+    // start time are scraped off the watch page.
+    QString uptime;
+    int uptimeSeconds = 0;
+    if (youtubeChannel.streamStartedAt().isValid())
+    {
+        auto diff = youtubeChannel.streamStartedAt().secsTo(
+            QDateTime::currentDateTimeUtc());
+        uptime = QString::number(diff / 3600) + "h " +
+                QString::number(diff % 3600 / 60) + "m";
+        uptimeSeconds = static_cast<int>(diff);
+    }
+
     return {
         .live = youtubeChannel.isLive(),
+        .viewerCount = youtubeChannel.viewerCount(),
         .title = youtubeChannel.title(),
+        .uptime = uptime,
+        .uptimeSeconds = uptimeSeconds,
         .streamType = QStringLiteral("live"),
     };
 }
@@ -1017,6 +1032,13 @@ void SplitHeader::handleChannelChanged()
         // showing "Offline" even once the stream is actually live.
         this->channelConnections_.managedConnect(
             youtubeChannel->liveStatusChanged, [this]() {
+                this->updateChannelText();
+            });
+        // Viewer count/uptime are refreshed periodically while live (see
+        // YouTubeChannel::scheduleStatsRefresh) - without this, the
+        // tooltip would stay frozen at whatever those were on connect.
+        this->channelConnections_.managedConnect(
+            youtubeChannel->streamStatusChanged, [this]() {
                 this->updateChannelText();
             });
     }

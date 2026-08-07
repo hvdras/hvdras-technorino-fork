@@ -44,6 +44,12 @@ public:
     /// URL of the stream's thumbnail image, if known. Same freshness caveat
     /// as title().
     const QString &thumbnailUrl() const;
+    /// Approximate concurrent viewer count, if known. Same freshness
+    /// caveat as title().
+    unsigned viewerCount() const;
+    /// When the current broadcast started, if known (invalid QDateTime
+    /// otherwise). Same freshness caveat as title().
+    const QDateTime &streamStartedAt() const;
 
     bool canSendMessage() const override;
     bool isLive() const override;
@@ -111,6 +117,10 @@ public:
     /// hasModRights()/refreshModStatus() resolves, so UI that already
     /// rendered based on the optimistic fallback can re-check.
     pajlada::Signals::NoArgSignal modStatusChanged;
+    /// Fired whenever viewerCount()/streamStartedAt() are refreshed (see
+    /// scheduleStatsRefresh), so the tab tooltip can pick up the new
+    /// values instead of staying frozen at whatever they were on connect.
+    pajlada::Signals::NoArgSignal streamStatusChanged;
 
 private:
     void fetchChannelLivePage(const QString &handle);
@@ -131,6 +141,14 @@ private:
     /// (e.g. if YouTube restricts liveChatModerators.list for non-owner
     /// accounts, which hasn't been confirmed either way).
     void refreshModStatus();
+    /// Re-fetches just enough of the watch page to refresh viewerCount()/
+    /// streamStartedAt(), then reschedules itself - separate from
+    /// fetchWatchPage()/fetchChannelLivePage() so it never touches the
+    /// live chat connection itself. Runs on a timer started when the
+    /// stream goes live, stopped implicitly once it stops (the weak_ptr
+    /// check simply won't reschedule once live_ is false).
+    void scheduleStatsRefresh();
+    void refreshStreamStats();
 
     QString videoId_;
     // The owning channel's path (e.g. "@somechannel" or "channel/UCxxxx").
@@ -142,6 +160,8 @@ private:
     QString apiKey_;
     QString title_;
     QString thumbnailUrl_;
+    unsigned viewerCount_ = 0;
+    QDateTime streamStartedAt_;
     bool live_ = false;
     // True once the first fetchLiveChat() poll of a connection has been
     // displayed. That first poll is a catch-up batch of messages that
