@@ -561,10 +561,15 @@ std::pair<bool, HighlightResult> HighlightController::check(
                 !kickUser->isAnonymous() && senderName == kickUser->username();
         }
         break;
-        case MessagePlatform::YouTube:
-            // YouTube chat is read-only; there's no logged-in account to
-            // compare against.
-            break;
+        case MessagePlatform::YouTube: {
+            auto youtubeUser = getApp()->getAccounts()->youtube.current();
+            self = !youtubeUser->isAnonymous() &&
+                  (senderName.compare(youtubeUser->channelName(),
+                                      Qt::CaseInsensitive) == 0 ||
+                   senderName.compare(youtubeUser->handle(),
+                                      Qt::CaseInsensitive) == 0);
+        }
+        break;
     }
 
     for (const auto &check : *checks)

@@ -10,6 +10,8 @@
 #include "common/network/NetworkResult.hpp"
 #include "common/QLogging.hpp"
 #include "controllers/accounts/AccountController.hpp"
+#include "controllers/highlights/HighlightController.hpp"
+#include "controllers/highlights/HighlightResult.hpp"
 #include "messages/Emote.hpp"
 #include "messages/Image.hpp"
 #include "messages/Message.hpp"
@@ -557,6 +559,67 @@ MessagePtr makeYouTubeDeletionMessage(const MessagePtr &original)
     builder->messageText = original->messageText;
     builder->searchText = original->messageText;
     return builder.release();
+}
+
+/// Runs a built message through the shared highlight-checking pipeline
+/// (self-mention, user-defined phrases, badge/user highlights, etc.) that
+/// Twitch/Kick messages already go through - mirrors
+/// KickMessageBuilder.cpp's processHighlights. Sets the Highlighted/
+/// ShowInMentions flags and highlight color directly on the message; the
+/// returned alert still needs to reach MessageBuilder::triggerHighlights to
+/// actually play a sound or flash the taskbar.
+HighlightAlert processYouTubeHighlights(MessageBuilder &builder)
+{
+    if (getSettings()->isBlacklistedUser(builder->loginName))
+    {
+        return {};
+    }
+
+    MessageParseArgs args;
+    auto [highlighted, highlightResult] = getApp()->getHighlights()->check(
+        args, {}, builder->loginName, builder->messageText, builder->flags,
+        builder->platform);
+
+    if (!highlighted)
+    {
+        return {};
+    }
+
+    builder->flags.set(MessageFlag::Highlighted);
+    builder->highlightColor = highlightResult.color;
+
+    if (highlightResult.showInMentions)
+    {
+        builder->flags.set(MessageFlag::ShowInMentions);
+    }
+
+    return {
+        .customSound = highlightResult.customSoundUrl.value_or(QUrl{}),
+        .playSound = highlightResult.playSound,
+        .windowAlert = highlightResult.alert,
+    };
+}
+
+struct PendingYouTubeMessage {
+    qint64 timestampUsec;
+    MessagePtr message;
+    HighlightAlert alert;
+};
+
+/// Plays/flashes a message's highlight alert (skipped entirely for catch-up
+/// history - see the call sites) and adds it to the global Mentions channel
+/// if it qualifies, same as Twitch/Kick do for their own highlighted
+/// messages.
+void deliverYouTubeHighlight(YouTubeChannel &channel,
+                             const PendingYouTubeMessage &pending)
+{
+    MessageBuilder::triggerHighlights(&channel, pending.alert);
+    if (pending.message->flags.has(MessageFlag::Highlighted) &&
+        pending.message->flags.has(MessageFlag::ShowInMentions))
+    {
+        getApp()->getTwitch()->getMentionsChannel()->addMessage(
+            pending.message, MessageContext::Original);
+    }
 }
 
 /// Hides a message and (optionally) posts the "was deleted" system message.
@@ -1298,7 +1361,7 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
             }
 
             // Parse chat messages
-            std::vector<std::pair<qint64, MessagePtr>> pendingMessages;
+            std::vector<PendingYouTubeMessage> pendingMessages;
             const auto actions = cc["actions"].toArray();
             for (const auto &actionVal : actions)
             {
@@ -1427,7 +1490,9 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
 
                 appendMessageRuns(builder, messageRuns);
 
-                pendingMessages.emplace_back(timestampUsec, builder.release());
+                auto alert = processYouTubeHighlights(builder);
+                pendingMessages.push_back(
+                    {timestampUsec, builder.release(), alert});
             }
 
             // YouTube's actions array isn't reliably in chronological order
@@ -1436,7 +1501,7 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
             // fillInMissingMessages' ascending-order assumption holds.
             std::stable_sort(pendingMessages.begin(), pendingMessages.end(),
                              [](const auto &a, const auto &b) {
-                                 return a.first < b.first;
+                                 return a.timestampUsec < b.timestampUsec;
                              });
 
             if (!self->receivedFirstBatch_)
@@ -1452,7 +1517,19 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
                 historyMessages.reserve(pendingMessages.size());
                 for (auto &pending : pendingMessages)
                 {
-                    historyMessages.push_back(pending.second);
+                    historyMessages.push_back(pending.message);
+                    // Skip the alert/sound for history (same as a Twitch
+                    // "historical" message never plays one), but it still
+                    // got the Highlighted flag/color from
+                    // processYouTubeHighlights above, so it still stands
+                    // out visually and shows up in Mentions.
+                    if (pending.message->flags.has(MessageFlag::Highlighted) &&
+                        pending.message->flags.has(
+                            MessageFlag::ShowInMentions))
+                    {
+                        getApp()->getTwitch()->getMentionsChannel()->addMessage(
+                            pending.message, MessageContext::Original);
+                    }
                 }
                 self->fillInMissingMessages(historyMessages);
             }
@@ -1468,35 +1545,40 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
                 qint64 cumulativeDelayMs = 0;
                 qint64 prevTimestampUsec = 0;
                 bool firstMessage = true;
-                for (auto &[timestampUsec, msg] : pendingMessages)
+                for (auto &pending : pendingMessages)
                 {
                     if (firstMessage)
                     {
-                        self->addMessage(msg, MessageContext::Original);
+                        self->addMessage(pending.message,
+                                         MessageContext::Original);
+                        deliverYouTubeHighlight(*self, pending);
                         firstMessage = false;
-                        prevTimestampUsec = timestampUsec;
+                        prevTimestampUsec = pending.timestampUsec;
                         continue;
                     }
 
                     qint64 deltaMs = minStaggerMs;
-                    if (timestampUsec > 0 && prevTimestampUsec > 0)
+                    if (pending.timestampUsec > 0 && prevTimestampUsec > 0)
                     {
-                        deltaMs = (timestampUsec - prevTimestampUsec) / 1000;
+                        deltaMs =
+                            (pending.timestampUsec - prevTimestampUsec) / 1000;
                     }
                     deltaMs =
                         std::clamp(deltaMs, minStaggerMs, maxStaggerMs);
                     cumulativeDelayMs += deltaMs;
-                    if (timestampUsec > 0)
+                    if (pending.timestampUsec > 0)
                     {
-                        prevTimestampUsec = timestampUsec;
+                        prevTimestampUsec = pending.timestampUsec;
                     }
 
-                    QTimer::singleShot(cumulativeDelayMs, [weak, msg] {
+                    QTimer::singleShot(cumulativeDelayMs, [weak, pending] {
                         auto self = std::static_pointer_cast<YouTubeChannel>(
                             weak.lock());
                         if (self)
                         {
-                            self->addMessage(msg, MessageContext::Original);
+                            self->addMessage(pending.message,
+                                             MessageContext::Original);
+                            deliverYouTubeHighlight(*self, pending);
                         }
                     });
                 }
