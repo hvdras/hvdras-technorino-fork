@@ -719,16 +719,65 @@ bool YouTubeChannel::hasModRights() const
     return !getApp()->getAccounts()->youtube.current()->isAnonymous();
 }
 
-void YouTubeChannel::deleteMessage(const QString &messageId)
+void YouTubeChannel::deleteMessage(const QString &authorChannelId,
+                                   const QDateTime &timestamp,
+                                   const QString &messageText)
 {
-    getYouTubeApi()->deleteMessage(
-        messageId, [weak = this->weak_from_this()](const auto &res) {
+    auto weak = this->weak_from_this();
+    auto reportError = [weak](const QString &error) {
+        auto self = std::static_pointer_cast<YouTubeChannel>(weak.lock());
+        if (!self)
+        {
+            return;
+        }
+        self->addSystemMessage(u"Failed to delete message: " % error);
+    };
+
+    auto findAndDelete = [weak, authorChannelId, timestamp, messageText,
+                          reportError](const QString &liveChatId) {
+        getYouTubeApi()->findMessageId(
+            liveChatId, authorChannelId, timestamp, messageText,
+            [weak, reportError](const ExpectedStr<QString> &res) {
+                if (!weak.lock())
+                {
+                    return;
+                }
+                if (!res)
+                {
+                    reportError(res.error());
+                    return;
+                }
+                getYouTubeApi()->deleteMessageById(
+                    *res, [reportError](const ExpectedStr<void> &delRes) {
+                        if (!delRes)
+                        {
+                            reportError(delRes.error());
+                        }
+                    });
+            });
+    };
+
+    if (!this->liveChatId_.isEmpty())
+    {
+        findAndDelete(this->liveChatId_);
+        return;
+    }
+
+    getYouTubeApi()->getLiveChatId(
+        this->videoId_,
+        [weak, findAndDelete, reportError](const ExpectedStr<QString> &res) {
             auto self = std::static_pointer_cast<YouTubeChannel>(weak.lock());
-            if (!self || res)
+            if (!self)
             {
                 return;
             }
-            self->addSystemMessage(u"Failed to delete message: " % res.error());
+            if (!res)
+            {
+                reportError(res.error());
+                return;
+            }
+            self->liveChatId_ = *res;
+            findAndDelete(*res);
         });
 }
 
@@ -819,6 +868,7 @@ void YouTubeChannel::fetchChannelLivePage(const QString &handle)
 
             self->setLive(true);
             self->receivedFirstBatch_ = false;
+            self->liveChatId_.clear();
             self->addSystemMessage(
                 u"YouTube: Live chat found for %1, connecting..."_s.arg(
                     self->videoId_));
@@ -901,6 +951,7 @@ void YouTubeChannel::fetchWatchPage()
 
             self->setLive(true);
             self->receivedFirstBatch_ = false;
+            self->liveChatId_.clear();
             self->addSystemMessage(u"YouTube: Live chat found, connecting..."_s);
             self->fetchLiveChat(continuation);
         })
