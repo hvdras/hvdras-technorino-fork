@@ -17,6 +17,8 @@
 #include "messages/Message.hpp"
 #include "messages/MessageBuilder.hpp"
 #include "messages/MessageElement.hpp"
+#include "providers/twitch/TwitchBadge.hpp"
+#include "providers/twitch/TwitchIrcServer.hpp"
 #include "providers/youtube/YouTubeAccount.hpp"
 #include "providers/youtube/YouTubeApi.hpp"
 #include "singletons/Settings.hpp"
