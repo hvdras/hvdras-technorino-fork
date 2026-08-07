@@ -4,15 +4,19 @@
 
 #include "providers/youtube/YouTubeChannel.hpp"
 
+#include "Application.hpp"
 #include "common/enums/MessageContext.hpp"
 #include "common/network/NetworkRequest.hpp"
 #include "common/network/NetworkResult.hpp"
 #include "common/QLogging.hpp"
+#include "controllers/accounts/AccountController.hpp"
 #include "messages/Emote.hpp"
 #include "messages/Image.hpp"
 #include "messages/Message.hpp"
 #include "messages/MessageBuilder.hpp"
 #include "messages/MessageElement.hpp"
+#include "providers/youtube/YouTubeAccount.hpp"
+#include "providers/youtube/YouTubeApi.hpp"
 #include "singletons/Settings.hpp"
 
 #include <QColor>
@@ -703,6 +707,29 @@ void YouTubeChannel::reconnect()
                 this->handle_));
         this->fetchChannelLivePage(this->handle_);
     }
+}
+
+bool YouTubeChannel::hasModRights() const
+{
+    // We have no cheap way to know whether the logged-in account is
+    // specifically a moderator/owner of *this* chat without an extra
+    // quota-costing API call, so any non-anonymous YouTube login is treated
+    // as having rights here. If it isn't actually one for this channel, the
+    // API call itself will fail with a permission error.
+    return !getApp()->getAccounts()->youtube.current()->isAnonymous();
+}
+
+void YouTubeChannel::deleteMessage(const QString &messageId)
+{
+    getYouTubeApi()->deleteMessage(
+        messageId, [weak = this->weak_from_this()](const auto &res) {
+            auto self = std::static_pointer_cast<YouTubeChannel>(weak.lock());
+            if (!self || res)
+            {
+                return;
+            }
+            self->addSystemMessage(u"Failed to delete message: " % res.error());
+        });
 }
 
 void YouTubeChannel::setLive(bool live)

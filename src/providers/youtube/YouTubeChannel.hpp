@@ -39,6 +39,13 @@ public:
     bool isLive() const override;
     bool canReconnect() const override;
     void reconnect() override;
+    bool hasModRights() const override;
+
+    /// Deletes a message via the official YouTube Data API v3, using the
+    /// currently logged-in YouTubeAccount's OAuth token. Requires that
+    /// account to actually be a moderator/owner of this chat - otherwise
+    /// the request fails and a system message is posted with the error.
+    void deleteMessage(const QString &messageId);
 
     /// Fired whenever isLive() changes, so the tab's live indicator updates.
     pajlada::Signals::NoArgSignal liveStatusChanged;

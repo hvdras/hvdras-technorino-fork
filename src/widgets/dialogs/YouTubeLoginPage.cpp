@@ -314,10 +314,12 @@ YouTubeLoginPage::YouTubeLoginPage()
         u"safely. In <a href=\"https://console.cloud.google.com/\">Google "
         u"Cloud Console</a>: create a project, enable the <b>YouTube Data "
         u"API v3</b>, then create an OAuth 2.0 Client ID of type <b>Desktop "
-        u"app</b>. Add this exact redirect URI: <b><code>" %
-        REDIRECT_URL %
-        u"</code></b>. While the consent screen is in \"Testing\" mode, add "
-        u"your own Google account as a test user."_s);
+        u"app</b> and paste its Client ID and secret below. While the "
+        u"consent screen is in \"Testing\" mode, add your Google account as "
+        u"a test user under the consent screen's Audience tab. If your "
+        u"channel is a separate Brand Account, pick it (not your personal "
+        u"account) at the sign-in screen so access is granted for the "
+        u"right channel."_s);
     root->addRow(this->ui.topLabel);
     root->addItem(
         new QSpacerItem(0, 10, QSizePolicy::Minimum, QSizePolicy::Fixed));

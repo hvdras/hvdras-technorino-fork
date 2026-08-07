@@ -6,6 +6,7 @@
 
 #include "common/QLogging.hpp"
 #include "providers/youtube/YouTubeAccount.hpp"
+#include "providers/youtube/YouTubeApi.hpp"
 #include "util/RapidJsonSerializeQString.hpp"  // IWYU pragma: keep
 #include "util/SharedPtrElementLess.hpp"
 
@@ -134,6 +135,7 @@ void YouTubeAccountManager::load()
         {
             qCDebug(chatterinoYoutube)
                 << "YouTube user updated to" << user->channelName();
+            getYouTubeApi()->setAuth(user->authToken());
             this->currentUser_ = user;
         }
         else
@@ -163,6 +165,14 @@ YouTubeAccountManager::AddUserResponse YouTubeAccountManager::addAccount(
 
     auto account = std::make_shared<YouTubeAccount>(data);
     this->accounts.insert(account);
+    this->holder.managedConnect(account->authUpdated, [this, account] {
+        if (this->currentUser_ == account)
+        {
+            getYouTubeApi()->setAuth(account->authToken());
+            qCDebug(chatterinoYoutube)
+                << "YouTube auth updated for" << account->channelName();
+        }
+    });
 
     return AddUserResponse::UserAdded;
 }

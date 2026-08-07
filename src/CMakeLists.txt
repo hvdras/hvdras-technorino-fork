@@ -456,6 +456,8 @@ set(SOURCE_FILES
         providers/youtube/YouTubeAccount.hpp
         providers/youtube/YouTubeAccountManager.cpp
         providers/youtube/YouTubeAccountManager.hpp
+        providers/youtube/YouTubeApi.cpp
+        providers/youtube/YouTubeApi.hpp
         providers/youtube/YouTubeChannel.cpp
         providers/youtube/YouTubeChannel.hpp
         providers/youtube/YouTubeChatServer.cpp

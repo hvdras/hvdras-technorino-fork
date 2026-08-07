@@ -3028,6 +3028,10 @@ void ChannelView::addMessageContextMenuItems(QMenu *menu,
                 {
                     kc->deleteMessage(id);
                 }
+                else if (auto *yc = dynamic_cast<YouTubeChannel *>(chan.get()))
+                {
+                    yc->deleteMessage(id);
+                }
             });
 
         auto *twitchChannel = dynamic_cast<TwitchChannel *>(chan.get());
