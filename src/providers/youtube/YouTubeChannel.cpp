@@ -18,6 +18,7 @@
 #include "providers/youtube/YouTubeAccount.hpp"
 #include "providers/youtube/YouTubeApi.hpp"
 #include "singletons/Settings.hpp"
+#include "util/FormatTime.hpp"
 
 #include <QColor>
 #include <QDateTime>
@@ -574,7 +575,8 @@ void handleMessageDeleted(Channel &channel, const QString &targetItemId)
 
 /// Handle a `removeChatItemByAuthorAction`: all of a user's messages were
 /// removed, e.g. as part of a ban/timeout.
-void handleAuthorMessagesDeleted(Channel &channel, const QJsonObject &action)
+void handleAuthorMessagesDeleted(YouTubeChannel &channel,
+                                 const QJsonObject &action)
 {
     const auto externalChannelId = action["externalChannelId"].toString();
     if (externalChannelId.isEmpty())
@@ -608,12 +610,31 @@ void handleAuthorMessagesDeleted(Channel &channel, const QJsonObject &action)
         return;
     }
 
-    if (!getSettings()->hideDeletionActions)
+    if (getSettings()->hideDeletionActions)
     {
-        channel.addSystemMessage(
-            u"YouTube: %1's messages were removed by a moderator."_s.arg(
-                authorName));
+        return;
     }
+
+    // Only known for bans/timeouts issued from this session - YouTube's
+    // live chat feed doesn't say which kind a removal was.
+    if (auto recorded = channel.peekBanDuration(externalChannelId))
+    {
+        if (*recorded)
+        {
+            channel.addSystemMessage(u"YouTube: %1 was timed out for %2."_s.arg(
+                authorName, formatTime(**recorded)));
+        }
+        else
+        {
+            channel.addSystemMessage(
+                u"YouTube: %1 was banned."_s.arg(authorName));
+        }
+        return;
+    }
+
+    channel.addSystemMessage(
+        u"YouTube: %1's messages were removed by a moderator."_s.arg(
+            authorName));
 }
 
 }  // namespace
@@ -727,12 +748,79 @@ void YouTubeChannel::reconnect()
 
 bool YouTubeChannel::hasModRights() const
 {
-    // We have no cheap way to know whether the logged-in account is
-    // specifically a moderator/owner of *this* chat without an extra
-    // quota-costing API call, so any non-anonymous YouTube login is treated
-    // as having rights here. If it isn't actually one for this channel, the
-    // API call itself will fail with a permission error.
+    if (this->confirmedModRights_)
+    {
+        return *this->confirmedModRights_;
+    }
+
+    // const_cast: hasModRights() is called from const contexts (e.g.
+    // context menu construction), but kicking off the real check is a
+    // cache-filling side effect - confirmedModRights_/checkingModRights_
+    // are the only things it touches, and both are mutable.
+    const_cast<YouTubeChannel *>(this)->refreshModStatus();
+
+    // Fall back to the old optimistic heuristic while the real check is
+    // still in flight (or couldn't be started, e.g. nobody logged in).
     return !getApp()->getAccounts()->youtube.current()->isAnonymous();
+}
+
+void YouTubeChannel::refreshModStatus()
+{
+    if (this->checkingModRights_ || this->confirmedModRights_)
+    {
+        return;
+    }
+
+    auto account = getApp()->getAccounts()->youtube.current();
+    if (account->isAnonymous())
+    {
+        return;
+    }
+
+    this->checkingModRights_ = true;
+    auto myChannelId = account->channelId();
+    auto weak = this->weakFromThis();
+
+    this->resolveLiveChatInfo(
+        [weak, myChannelId](const ExpectedStr<YouTubeLiveChatInfo> &res) {
+            auto self = weak.lock();
+            if (!self)
+            {
+                return;
+            }
+            if (!res)
+            {
+                // Inconclusive - leave confirmedModRights_ unset so
+                // hasModRights() keeps using the optimistic fallback.
+                self->checkingModRights_ = false;
+                return;
+            }
+            if (res->broadcasterChannelId == myChannelId)
+            {
+                self->confirmedModRights_ = true;
+                self->checkingModRights_ = false;
+                self->modStatusChanged.invoke();
+                return;
+            }
+
+            getYouTubeApi()->checkIsModerator(
+                res->liveChatId, myChannelId,
+                [weak](const ExpectedStr<bool> &modRes) {
+                    auto self = weak.lock();
+                    if (!self)
+                    {
+                        return;
+                    }
+                    self->checkingModRights_ = false;
+                    if (modRes)
+                    {
+                        self->confirmedModRights_ = *modRes;
+                        self->modStatusChanged.invoke();
+                    }
+                    // else inconclusive (e.g. YouTube restricting this
+                    // endpoint for non-owner accounts) - leave unset.
+                });
+        });
 }
 
 void YouTubeChannel::deleteMessage(const QString &messageId,
@@ -750,9 +838,9 @@ void YouTubeChannel::deleteMessage(const QString &messageId,
         self->addSystemMessage(u"Failed to delete message: " % error);
     };
 
-    this->resolveLiveChatId([weak, messageId, authorChannelId, timestamp,
-                             messageText,
-                             reportError](const ExpectedStr<QString> &idRes) {
+    this->resolveLiveChatInfo(
+        [weak, messageId, authorChannelId, timestamp, messageText,
+         reportError](const ExpectedStr<YouTubeLiveChatInfo> &idRes) {
         if (!weak.lock())
         {
             return;
@@ -764,7 +852,7 @@ void YouTubeChannel::deleteMessage(const QString &messageId,
         }
 
         getYouTubeApi()->findMessageId(
-            *idRes, authorChannelId, timestamp, messageText,
+            idRes->liveChatId, authorChannelId, timestamp, messageText,
             [weak, messageId, reportError](const ExpectedStr<QString> &res) {
                 if (!weak.lock())
                 {
@@ -798,19 +886,19 @@ void YouTubeChannel::deleteMessage(const QString &messageId,
     });
 }
 
-void YouTubeChannel::resolveLiveChatId(
-    std::function<void(ExpectedStr<QString>)> cb)
+void YouTubeChannel::resolveLiveChatInfo(
+    std::function<void(ExpectedStr<YouTubeLiveChatInfo>)> cb)
 {
     if (!this->liveChatId_.isEmpty())
     {
-        cb(this->liveChatId_);
+        cb(YouTubeLiveChatInfo{this->liveChatId_, this->broadcasterChannelId_});
         return;
     }
 
     auto weak = this->weak_from_this();
-    getYouTubeApi()->getLiveChatId(
+    getYouTubeApi()->getLiveChatInfo(
         this->videoId_,
-        [weak, cb = std::move(cb)](const ExpectedStr<QString> &res) {
+        [weak, cb = std::move(cb)](const ExpectedStr<YouTubeLiveChatInfo> &res) {
             auto self = std::static_pointer_cast<YouTubeChannel>(weak.lock());
             if (!self)
             {
@@ -818,29 +906,42 @@ void YouTubeChannel::resolveLiveChatId(
             }
             if (res)
             {
-                self->liveChatId_ = *res;
+                self->liveChatId_ = res->liveChatId;
+                self->broadcasterChannelId_ = res->broadcasterChannelId;
             }
             cb(res);
         });
 }
 
-void YouTubeChannel::recordBanId(const QString &targetChannelId,
-                                 const QString &banId)
+void YouTubeChannel::recordBan(const QString &targetChannelId,
+                               const QString &banId,
+                               std::optional<std::chrono::seconds> duration)
 {
-    this->banIdsByChannelId_[targetChannelId] = banId;
+    this->bansByChannelId_[targetChannelId] = RecordedBan{banId, duration};
 }
 
 std::optional<QString> YouTubeChannel::takeBanId(
     const QString &targetChannelId)
 {
-    auto it = this->banIdsByChannelId_.find(targetChannelId);
-    if (it == this->banIdsByChannelId_.end())
+    auto it = this->bansByChannelId_.find(targetChannelId);
+    if (it == this->bansByChannelId_.end())
     {
         return std::nullopt;
     }
-    auto banId = it.value();
-    this->banIdsByChannelId_.erase(it);
+    auto banId = it.value().banId;
+    this->bansByChannelId_.erase(it);
     return banId;
+}
+
+std::optional<std::optional<std::chrono::seconds>>
+    YouTubeChannel::peekBanDuration(const QString &targetChannelId) const
+{
+    auto it = this->bansByChannelId_.find(targetChannelId);
+    if (it == this->bansByChannelId_.end())
+    {
+        return std::nullopt;
+    }
+    return it.value().duration;
 }
 
 void YouTubeChannel::setLive(bool live)
@@ -931,7 +1032,10 @@ void YouTubeChannel::fetchChannelLivePage(const QString &handle)
             self->setLive(true);
             self->receivedFirstBatch_ = false;
             self->liveChatId_.clear();
-            self->banIdsByChannelId_.clear();
+            self->broadcasterChannelId_.clear();
+            self->confirmedModRights_.reset();
+            self->checkingModRights_ = false;
+            self->bansByChannelId_.clear();
             self->addSystemMessage(
                 u"YouTube: Live chat found for %1, connecting..."_s.arg(
                     self->videoId_));
@@ -1015,7 +1119,10 @@ void YouTubeChannel::fetchWatchPage()
             self->setLive(true);
             self->receivedFirstBatch_ = false;
             self->liveChatId_.clear();
-            self->banIdsByChannelId_.clear();
+            self->broadcasterChannelId_.clear();
+            self->confirmedModRights_.reset();
+            self->checkingModRights_ = false;
+            self->bansByChannelId_.clear();
             self->addSystemMessage(u"YouTube: Live chat found, connecting..."_s);
             self->fetchLiveChat(continuation);
         })
@@ -1248,6 +1355,16 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
                     builder->serverReceivedTime.isValid()
                         ? builder->serverReceivedTime.toLocalTime().time()
                         : QTime::currentTime());
+
+                // Adds the moderation-mode action buttons configured in
+                // settings (only visibly rendered when moderation mode is
+                // toggled on for the split). Skipped for the broadcaster's
+                // own messages if we already know their channel ID.
+                if (self->broadcasterChannelId_.isEmpty() ||
+                    builder->userID != self->broadcasterChannelId_)
+                {
+                    builder.emplace<TwitchModerationElement>();
+                }
 
                 for (const auto &[emote, flag] : parseAuthorBadges(renderer))
                 {

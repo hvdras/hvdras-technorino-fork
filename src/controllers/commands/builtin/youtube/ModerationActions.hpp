@@ -19,4 +19,7 @@ QString doYouTubeTimeout(const CommandContext &ctx);
 /// /unban (YouTube)
 QString doYouTubeUnban(const CommandContext &ctx);
 
+/// /delete (YouTube)
+QString doYouTubeDelete(const CommandContext &ctx);
+
 }  // namespace chatterino::commands

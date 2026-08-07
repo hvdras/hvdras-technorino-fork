@@ -5,6 +5,7 @@
 #pragma once
 
 #include "common/Channel.hpp"
+#include "providers/youtube/YouTubeApi.hpp"
 #include "util/Expected.hpp"
 
 #include <pajlada/signals/signal.hpp>
@@ -13,6 +14,7 @@
 #include <QHash>
 #include <QString>
 
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -64,22 +66,38 @@ public:
     void deleteMessage(const QString &messageId, const QString &authorChannelId,
                        const QDateTime &timestamp, const QString &messageText);
 
-    /// Resolves (and caches) the active live chat ID for the current
-    /// broadcast. Used by every moderation action (delete/ban/timeout),
-    /// which all need it but shouldn't each re-resolve it individually.
-    void resolveLiveChatId(std::function<void(ExpectedStr<QString>)> cb);
+    /// Resolves (and caches) the live chat info for the current broadcast.
+    /// Used by every moderation action (delete/ban/timeout/mod check), which
+    /// all need it but shouldn't each re-resolve it individually.
+    void resolveLiveChatInfo(
+        std::function<void(ExpectedStr<YouTubeLiveChatInfo>)> cb);
 
     /// Remembers the ban resource ID YouTube returned for a given target
     /// channel, so a later unban can reference it - the official API can
     /// only unban by ban resource ID, not by channel ID, and has no way to
-    /// look one up after the fact.
-    void recordBanId(const QString &targetChannelId, const QString &banId);
+    /// look one up after the fact. `duration` is kept alongside it purely
+    /// for local display purposes (see peekBanDuration).
+    void recordBan(const QString &targetChannelId, const QString &banId,
+                   std::optional<std::chrono::seconds> duration);
     /// Returns and forgets the most recent ban ID recorded for a channel in
-    /// this session, if any.
+    /// this session, if any. Used by unban.
     std::optional<QString> takeBanId(const QString &targetChannelId);
+    /// Non-consuming lookup of the most recent ban/timeout we issued for this
+    /// channel in this session. Outer nullopt = no record found (action was
+    /// taken elsewhere - YouTube Studio, another mod, a previous session -
+    /// or this channel was never banned by us); inner nullopt = a permanent
+    /// ban; a value = a timeout of that length. YouTube's live chat feed
+    /// doesn't say which of these a removeChatItemByAuthorAction was, so
+    /// this only ever helps for actions this session itself took.
+    std::optional<std::optional<std::chrono::seconds>> peekBanDuration(
+        const QString &targetChannelId) const;
 
     /// Fired whenever isLive() changes, so the tab's live indicator updates.
     pajlada::Signals::NoArgSignal liveStatusChanged;
+    /// Fired once the real moderator-status check kicked off by
+    /// hasModRights()/refreshModStatus() resolves, so UI that already
+    /// rendered based on the optimistic fallback can re-check.
+    pajlada::Signals::NoArgSignal modStatusChanged;
 
 private:
     void fetchChannelLivePage(const QString &handle);
@@ -91,6 +109,15 @@ private:
     /// lookup finds nobody currently live). Schedules another attempt to
     /// find a live stream instead of giving up permanently.
     void scheduleRediscovery();
+    /// Kicks off (at most once per broadcast) a real check of whether the
+    /// currently logged-in YouTube account is the broadcaster or a
+    /// moderator of this specific chat, via videos.list +
+    /// liveChatModerators.list. Until/unless this resolves, hasModRights()
+    /// falls back to assuming yes for any logged-in account, same as
+    /// before this existed - the check may simply be unable to complete
+    /// (e.g. if YouTube restricts liveChatModerators.list for non-owner
+    /// accounts, which hasn't been confirmed either way).
+    void refreshModStatus();
 
     QString videoId_;
     // The owning channel's path (e.g. "@somechannel" or "channel/UCxxxx").
@@ -109,14 +136,24 @@ private:
     // than staggered like later polls. Reset whenever a new connection to a
     // live chat starts.
     bool receivedFirstBatch_ = false;
-    // Cached activeLiveChatId for the current videoId_, resolved lazily on
+    // Cached live chat info for the current videoId_, resolved lazily on
     // first moderation action. Cleared whenever videoId_ changes (i.e. a new
     // connection/broadcast is picked up).
     QString liveChatId_;
-    // Ban resource IDs recorded from successful ban/timeout calls, keyed by
-    // target channel ID, so unban can find them again. In-memory only and
-    // scoped to the current liveChatId_ - cleared alongside it.
-    QHash<QString, QString> banIdsByChannelId_;
+    QString broadcasterChannelId_;
+    // Real moderator-status result, if the check managed to complete for
+    // the current broadcast - see refreshModStatus(). mutable because
+    // hasModRights() (const) lazily triggers the check as a side effect.
+    mutable std::optional<bool> confirmedModRights_;
+    mutable bool checkingModRights_ = false;
+    struct RecordedBan {
+        QString banId;
+        std::optional<std::chrono::seconds> duration;
+    };
+    // Ban records from successful ban/timeout calls, keyed by target channel
+    // ID. In-memory only and scoped to the current liveChatId_ - cleared
+    // alongside it.
+    QHash<QString, RecordedBan> bansByChannelId_;
 
     pajlada::Signals::SignalHolder signalHolder_;
 };

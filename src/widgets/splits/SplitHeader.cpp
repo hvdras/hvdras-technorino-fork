@@ -1227,7 +1227,7 @@ void SplitHeader::updateIcons()
 {
     auto channel = this->split_->getSelectedChannel();
 
-    if (channel->isTwitchOrKickChannel())
+    if (channel->isTwitchOrKickChannel() || channel->isYouTubeChannel())
     {
         auto moderationMode = this->split_->getModerationMode() &&
                               !getSettings()->moderationActions.empty();

@@ -40,10 +40,11 @@ YouTubeApi *YouTubeApi::instance()
     return api.get();
 }
 
-void YouTubeApi::getLiveChatId(const QString &videoId, Callback<QString> cb)
+void YouTubeApi::getLiveChatInfo(const QString &videoId,
+                                 Callback<YouTubeLiveChatInfo> cb)
 {
     QString url =
-        u"https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id="_s %
+        u"https://www.googleapis.com/youtube/v3/videos?part=snippet,liveStreamingDetails&id="_s %
         QString::fromUtf8(QUrl::toPercentEncoding(videoId));
 
     NetworkRequest(url)
@@ -58,8 +59,8 @@ void YouTubeApi::getLiveChatId(const QString &videoId, Callback<QString> cb)
                 cb(makeUnexpected(u"Video not found."_s));
                 return;
             }
-            auto liveChatId = items.at(0)
-                                  .toObject()["liveStreamingDetails"_L1]
+            auto item = items.at(0).toObject();
+            auto liveChatId = item["liveStreamingDetails"_L1]
                                   .toObject()["activeLiveChatId"_L1]
                                   .toString();
             if (liveChatId.isEmpty())
@@ -67,7 +68,40 @@ void YouTubeApi::getLiveChatId(const QString &videoId, Callback<QString> cb)
                 cb(makeUnexpected(u"This video has no active live chat."_s));
                 return;
             }
-            cb(liveChatId);
+            auto broadcasterChannelId =
+                item["snippet"_L1].toObject()["channelId"_L1].toString();
+            cb(YouTubeLiveChatInfo{liveChatId, broadcasterChannelId});
+        })
+        .execute();
+}
+
+void YouTubeApi::checkIsModerator(const QString &liveChatId,
+                                  const QString &channelId, Callback<bool> cb)
+{
+    QString url =
+        u"https://www.googleapis.com/youtube/v3/liveChat/moderators"
+        u"?part=snippet&maxResults=50&liveChatId="_s %
+        QString::fromUtf8(QUrl::toPercentEncoding(liveChatId));
+
+    NetworkRequest(url)
+        .header("Authorization"_ba, "Bearer "_ba + this->authToken_)
+        .onError([cb](const NetworkResult &res) {
+            cb(makeUnexpected(formatApiError(res)));
+        })
+        .onSuccess([cb, channelId](const NetworkResult &res) {
+            auto items = res.parseJson()["items"_L1].toArray();
+            for (const auto &itemVal : items)
+            {
+                auto details = itemVal.toObject()["snippet"_L1]
+                                  .toObject()["moderatorDetails"_L1]
+                                  .toObject();
+                if (details["channelId"_L1].toString() == channelId)
+                {
+                    cb(true);
+                    return;
+                }
+            }
+            cb(false);
         })
         .execute();
 }

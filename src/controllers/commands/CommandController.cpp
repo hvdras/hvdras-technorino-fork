@@ -173,6 +173,25 @@ const std::unordered_map<QString, VariableReplacer> COMMAND_VARS{
         },
     },
     {
+        "user.id",
+        [](const auto &altText, const auto &channel, const auto *message) {
+            (void)(channel);  //unused
+            if (message == nullptr)
+            {
+                return altText;
+            }
+
+            const auto &v = message->userID;
+
+            if (v.isEmpty())
+            {
+                return altText;
+            }
+
+            return v;
+        },
+    },
+    {
         // NOTE: The use of {user} is deprecated and support for it will drop at some point
         // Users should be encouraged to use {user.name} instead.
         "user",

@@ -1,6 +1,8 @@
 #include "controllers/commands/builtin/youtube/ModerationActions.hpp"
 
+#include "common/Channel.hpp"
 #include "controllers/commands/CommandContext.hpp"
+#include "messages/Message.hpp"
 #include "providers/youtube/YouTubeApi.hpp"
 #include "providers/youtube/YouTubeChannel.hpp"
 #include "util/Helpers.hpp"
@@ -62,8 +64,8 @@ void doBan(const CommandContext &ctx,
 
     auto weak = ctx.youtubeChannel->weakFromThis();
     auto id = *targetChannelId;
-    ctx.youtubeChannel->resolveLiveChatId(
-        [weak, id, duration](const ExpectedStr<QString> &liveChatIdRes) {
+    ctx.youtubeChannel->resolveLiveChatInfo(
+        [weak, id, duration](const ExpectedStr<YouTubeLiveChatInfo> &liveChatIdRes) {
             auto self = weak.lock();
             if (!self)
             {
@@ -77,8 +79,8 @@ void doBan(const CommandContext &ctx,
             }
 
             getYouTubeApi()->banUser(
-                *liveChatIdRes, id, duration,
-                [weak, id](const ExpectedStr<QString> &banRes) {
+                liveChatIdRes->liveChatId, id, duration,
+                [weak, id, duration](const ExpectedStr<QString> &banRes) {
                     auto self = weak.lock();
                     if (!self)
                     {
@@ -90,7 +92,7 @@ void doBan(const CommandContext &ctx,
                                                banRes.error());
                         return;
                     }
-                    self->recordBanId(id, *banRes);
+                    self->recordBan(id, *banRes, duration);
                 });
         });
 }
@@ -131,6 +133,39 @@ QString doYouTubeTimeout(const CommandContext &ctx)
     doBan(ctx, duration,
          u"Usage: \"/timeout id:<channelId> [duration]\" - only usable from "
          u"a message's right-click menu or a user's card."_s);
+    return {};
+}
+
+QString doYouTubeDelete(const CommandContext &ctx)
+{
+    if (!ctx.youtubeChannel)
+    {
+        ctx.channel->addSystemMessage(
+            u"This command only works in YouTube channels"_s);
+        return {};
+    }
+    if (ctx.words.size() < 2)
+    {
+        ctx.channel->addSystemMessage(u"Usage: \"/delete <msg.id>\""_s);
+        return {};
+    }
+
+    // Unlike Twitch/Kick, deleting needs more than just the message ID (see
+    // YouTubeChannel::deleteMessage) - recovered here by looking the message
+    // up in our own local history instead of needing it passed in directly,
+    // so {msg.id}-based moderation action buttons still work.
+    auto msg = ctx.channel->findMessageByID(ctx.words.at(1));
+    if (!msg)
+    {
+        ctx.channel->addSystemMessage(
+            u"Couldn't find that message to delete it - it may have "
+            u"scrolled out of the local history."_s);
+        return {};
+    }
+
+    ctx.youtubeChannel->deleteMessage(msg->id, msg->userID,
+                                      msg->serverReceivedTime,
+                                      msg->messageText);
     return {};
 }
 
