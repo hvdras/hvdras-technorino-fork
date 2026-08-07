@@ -1266,19 +1266,15 @@ void SplitHeader::updateIcons()
             });
         }
 
-        // YouTube can't tell instantly whether the logged-in account
-        // actually moderates this specific chat (see
-        // YouTubeChannel::hasConfirmedModRights), so use the strict check
-        // there instead of the optimistic hasModRights() every other
-        // platform uses - otherwise this button (and moderation mode
-        // itself) would be handed to any logged-in viewer, not just mods.
-        bool canModerate = channel->hasModRights();
-        if (auto *youtubeChannel = dynamic_cast<YouTubeChannel *>(channel.get()))
-        {
-            canModerate = youtubeChannel->hasConfirmedModRights();
-        }
-
-        if (canModerate || moderationMode)
+        // Tried gating this on YouTubeChannel::hasConfirmedModRights()
+        // (a real liveChatModerators.list check) instead of the optimistic
+        // hasModRights(), but that check appears to require the
+        // broadcaster's own token - real moderators using their own
+        // account got locked out of moderation mode entirely, which is
+        // worse than occasionally showing it to a non-mod whose actions
+        // would just get rejected by YouTube's API anyway. Back to
+        // optimistic for now.
+        if (channel->hasModRights() || moderationMode)
         {
             this->moderationButton_->show();
         }

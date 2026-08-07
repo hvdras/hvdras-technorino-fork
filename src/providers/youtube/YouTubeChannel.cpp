@@ -769,9 +769,16 @@ void YouTubeChannel::reconnect()
 
 bool YouTubeChannel::hasModRights() const
 {
-    if (this->confirmedModRights_)
+    // Only ever trust a *positive* confirmation here (reliable either way:
+    // an exact broadcaster-channel-ID match, or a moderator-list hit). A
+    // negative result isn't trusted for hiding tools - checkIsModerator's
+    // liveChatModerators.list call appears to require the broadcaster's
+    // own token, so a real moderator's own account can get a "confirmed
+    // false" that's actually just YouTube rejecting the check itself, not
+    // a genuine answer. See hasConfirmedModRights for the strict version.
+    if (this->confirmedModRights_ && *this->confirmedModRights_)
     {
-        return *this->confirmedModRights_;
+        return true;
     }
 
     // const_cast: hasModRights() is called from const contexts (e.g.
