@@ -1017,7 +1017,8 @@ bool YouTubeChannel::hasConfirmedModRights() const
 
 void YouTubeChannel::refreshModStatus()
 {
-    if (this->checkingModRights_ || this->confirmedModRights_)
+    if (this->checkingModRights_ || this->confirmedModRights_ ||
+        this->attemptedModStatusCheck_)
     {
         return;
     }
@@ -1028,6 +1029,7 @@ void YouTubeChannel::refreshModStatus()
         return;
     }
 
+    this->attemptedModStatusCheck_ = true;
     this->checkingModRights_ = true;
     auto myChannelId = account->channelId();
     auto weak = this->weakFromThis();
@@ -1355,6 +1357,7 @@ void YouTubeChannel::fetchChannelLivePage(const QString &handle)
             self->broadcasterChannelId_.clear();
             self->confirmedModRights_.reset();
             self->checkingModRights_ = false;
+            self->attemptedModStatusCheck_ = false;
             self->bansByChannelId_.clear();
             self->addSystemMessage(
                 u"YouTube: Live chat found for %1, connecting..."_s.arg(
@@ -1449,6 +1452,7 @@ void YouTubeChannel::fetchWatchPage()
             self->broadcasterChannelId_.clear();
             self->confirmedModRights_.reset();
             self->checkingModRights_ = false;
+            self->attemptedModStatusCheck_ = false;
             self->bansByChannelId_.clear();
             self->addSystemMessage(u"YouTube: Live chat found, connecting..."_s);
             self->fetchLiveChat(continuation);

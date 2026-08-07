@@ -179,6 +179,14 @@ private:
     // hasModRights() (const) lazily triggers the check as a side effect.
     mutable std::optional<bool> confirmedModRights_;
     mutable bool checkingModRights_ = false;
+    // Set the moment a check is kicked off and never cleared until the
+    // next broadcast, regardless of outcome - without this, an
+    // inconclusive result (confirmedModRights_ staying unset) would let
+    // every subsequent hasModRights() call re-trigger the check from
+    // scratch, burning API quota on every single call site that happens
+    // to invoke it (usercards, context menus, SplitHeader icon refreshes,
+    // etc.) instead of at most once per broadcast as intended.
+    mutable bool attemptedModStatusCheck_ = false;
     struct RecordedBan {
         QString banId;
         std::optional<std::chrono::seconds> duration;
