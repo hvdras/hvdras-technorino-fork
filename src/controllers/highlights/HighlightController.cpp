@@ -20,6 +20,8 @@
 #include "providers/twitch/TwitchBadge.hpp"
 #include "singletons/Settings.hpp"
 
+#include <QStringList>
+
 namespace {
 
 using namespace chatterino;
@@ -224,18 +226,33 @@ void rebuildMessageHighlights(Settings &settings,
     }
 
     auto youtubeUser = getApp()->getAccounts()->youtube.current();
-    auto youtubeChannelName = youtubeUser->channelName();
-    if (settings.enableSelfHighlight && !youtubeChannelName.isEmpty() &&
-        !youtubeUser->isAnonymous())
+    if (settings.enableSelfHighlight && !youtubeUser->isAnonymous())
     {
-        HighlightPhrase highlight(
-            youtubeChannelName, settings.showSelfHighlightInMentions,
-            settings.enableSelfHighlightTaskbar,
-            settings.enableSelfHighlightSound, false, false,
-            settings.selfHighlightSoundUrl.getValue(),
-            ColorProvider::instance().color(ColorType::SelfHighlight));
+        // People @-mention the channel's handle (e.g. "hvdras"), not
+        // necessarily its display name (e.g. "Hydra") - those can differ.
+        // Match against both, since either could show up in a message.
+        QStringList selfPhrases;
+        if (!youtubeUser->handle().isEmpty())
+        {
+            selfPhrases << youtubeUser->handle();
+        }
+        if (!youtubeUser->channelName().isEmpty() &&
+            youtubeUser->channelName() != youtubeUser->handle())
+        {
+            selfPhrases << youtubeUser->channelName();
+        }
 
-        checks.emplace_back(highlightPhraseCheck(highlight));
+        for (const auto &phrase : selfPhrases)
+        {
+            HighlightPhrase highlight(
+                phrase, settings.showSelfHighlightInMentions,
+                settings.enableSelfHighlightTaskbar,
+                settings.enableSelfHighlightSound, false, false,
+                settings.selfHighlightSoundUrl.getValue(),
+                ColorProvider::instance().color(ColorType::SelfHighlight));
+
+            checks.emplace_back(highlightPhraseCheck(highlight));
+        }
     }
 
     auto messageHighlights = settings.highlightedMessages.readOnly();
