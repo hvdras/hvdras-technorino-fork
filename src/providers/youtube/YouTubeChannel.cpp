@@ -17,6 +17,7 @@
 #include "messages/Message.hpp"
 #include "messages/MessageBuilder.hpp"
 #include "messages/MessageElement.hpp"
+#include "providers/repetitions/RepeatedMessageDetector.hpp"
 #include "providers/twitch/TwitchBadge.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
 #include "providers/youtube/YouTubeAccount.hpp"
@@ -600,6 +601,79 @@ HighlightAlert processYouTubeHighlights(MessageBuilder &builder)
         .playSound = highlightResult.playSound,
         .windowAlert = highlightResult.alert,
     };
+}
+
+/// Whether the author's badges include a specific icon type ("MODERATOR",
+/// "OWNER") - used by the repeated-message counter below, which needs a
+/// plain bool rather than the badge emote parseAuthorBadges builds.
+bool authorHasBadgeIconType(const QJsonObject &renderer, QStringView iconType)
+{
+    const auto authorBadges = renderer["authorBadges"].toArray();
+    for (const auto &badgeVal : authorBadges)
+    {
+        auto badgeRenderer =
+            badgeVal.toObject()["liveChatAuthorBadgeRenderer"].toObject();
+        if (badgeRenderer["icon"].toObject()["iconType"].toString() ==
+            iconType)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Adds the "xN" repeated-message counter Twitch chat already has - mirrors
+/// appendRepeatedMessageCounter in MessageBuilder.cpp, adapted since
+/// YouTube has no IRC tags to read this from. `broadcasterChannelId` is
+/// passed in rather than read off the channel directly since this is a free
+/// function, not a YouTubeChannel member, and that field is private.
+void appendYouTubeRepeatedMessageCounter(MessageBuilder &builder,
+                                         YouTubeChannel &channel,
+                                         const QString &broadcasterChannelId,
+                                         const QJsonObject &renderer,
+                                         bool historical)
+{
+    auto *detector = getApp()->getRepeatedMessageDetector();
+    if (detector == nullptr)
+    {
+        return;
+    }
+
+    bool senderIsBroadcaster = authorHasBadgeIconType(renderer, u"OWNER") ||
+                               (!broadcasterChannelId.isEmpty() &&
+                                builder->userID == broadcasterChannelId);
+
+    const RepeatedMessageCheck check{
+        .channelID = builder->channelName,
+        .userID = builder->userID,
+        .messageID = builder->id,
+        .message = builder->messageText,
+        .historical = historical,
+        .channelCanModerate = channel.hasModRights(),
+        .senderIsModerator = authorHasBadgeIconType(renderer, u"MODERATOR"),
+        .senderIsBroadcaster = senderIsBroadcaster,
+        .senderIsVip = false,
+    };
+
+    auto count = detector->check(check);
+    if (!count)
+    {
+        return;
+    }
+
+    builder.message().flags.set(MessageFlag::RepeatedMessage);
+
+    QColor color(getSettings()->repeatedMessagesCounterColor.getValue());
+    if (!color.isValid())
+    {
+        color = QColor("#ff3b3b");
+    }
+
+    builder
+        .emplace<TextElement>(QStringLiteral("x%1").arg(*count),
+                              MessageElementFlag::RepeatedMessageCounter,
+                              MessageColor(color), FontStyle::ChatMedium)
+        ->setTrailingSpace(false);
 }
 
 struct PendingYouTubeMessage {
@@ -1491,6 +1565,10 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
                     ->setLink({Link::UserInfo, authorName});
 
                 appendMessageRuns(builder, messageRuns);
+
+                appendYouTubeRepeatedMessageCounter(
+                    builder, *self, self->broadcasterChannelId_, renderer,
+                    !self->receivedFirstBatch_);
 
                 auto alert = processYouTubeHighlights(builder);
                 pendingMessages.push_back(
