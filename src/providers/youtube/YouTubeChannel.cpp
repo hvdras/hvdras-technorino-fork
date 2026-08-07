@@ -30,8 +30,6 @@ namespace chatterino {
 
 namespace {
 
-Q_LOGGING_CATEGORY(chatterinoYoutube, "chatterino.youtube")
-
 // YouTube red for author names
 const QColor YOUTUBE_RED{0xFF, 0x00, 0x00};
 
