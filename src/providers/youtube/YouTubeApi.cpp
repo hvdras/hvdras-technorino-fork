@@ -25,7 +25,7 @@ YouTubeApi *YouTubeApi::instance()
 void YouTubeApi::deleteMessage(const QString &messageId, Callback cb)
 {
     QString url =
-        u"https://www.googleapis.com/youtube/v3/liveChatMessages?id="_s %
+        u"https://www.googleapis.com/youtube/v3/liveChat/messages?id="_s %
         QString::fromUtf8(QUrl::toPercentEncoding(messageId));
 
     NetworkRequest(url, NetworkRequestType::Delete)
