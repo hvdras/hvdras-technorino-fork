@@ -49,7 +49,20 @@ public:
     bool isLive() const override;
     bool canReconnect() const override;
     void reconnect() override;
+    /// Optimistic: true for any logged-in YouTube account until/unless the
+    /// real check (see hasConfirmedModRights) comes back negative, so a
+    /// single mod/ban/timeout/delete attempt is never blocked client-side -
+    /// worst case YouTube's own API rejects it with a real error. Used by
+    /// the per-action paths (usercard buttons, right-click menu).
     bool hasModRights() const override;
+    /// Strict: only true once the real broadcaster/moderator check (see
+    /// refreshModStatus) has positively confirmed it - false both while
+    /// still checking and if it's permanently unable to complete. Used to
+    /// decide whether to expose broader moderation UI (the moderation-mode
+    /// toggle) to begin with, where showing it to a random logged-in
+    /// viewer would be misleading even though any action they took through
+    /// it would still just fail server-side.
+    bool hasConfirmedModRights() const;
 
     /// Deletes a message via the official YouTube Data API v3, using the
     /// currently logged-in YouTubeAccount's OAuth token. Requires that

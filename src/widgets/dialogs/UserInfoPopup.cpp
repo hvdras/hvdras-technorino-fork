@@ -681,8 +681,12 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
                     !this->youtubeChannelId_.isEmpty() &&
                     getApp()->getAccounts()->youtube.current()->channelId() ==
                         this->youtubeChannelId_;
-                visible = youtubeChannel->hasModRights() && !isMyself &&
-                          !this->youtubeChannelId_.isEmpty();
+                // Strict check here (unlike the ban/timeout/delete actions
+                // themselves, which stay optimistic) - showing timeout
+                // buttons to a random logged-in viewer would be misleading
+                // even though clicking them would still just fail.
+                visible = youtubeChannel->hasConfirmedModRights() &&
+                          !isMyself && !this->youtubeChannelId_.isEmpty();
             }
             lineMod->setVisible(visible);
             timeout->setVisible(visible);

@@ -1001,6 +1001,25 @@ void SplitHeader::handleChannelChanged()
                                                      this->updateChannelText();
                                                  });
     }
+    else if (auto *youtubeChannel =
+                 dynamic_cast<YouTubeChannel *>(channel.get()))
+    {
+        // Lets the moderation-mode button correct itself once the real
+        // moderator-status check resolves, instead of only updating on the
+        // next unrelated icon refresh.
+        this->channelConnections_.managedConnect(
+            youtubeChannel->modStatusChanged, [this]() {
+                this->updateIcons();
+            });
+        // Without this, the title/thumbnail tooltip is only ever computed
+        // once at connect time (when the chat is still "connecting", not
+        // live yet) and never refreshes afterwards, so it gets stuck
+        // showing "Offline" even once the stream is actually live.
+        this->channelConnections_.managedConnect(
+            youtubeChannel->liveStatusChanged, [this]() {
+                this->updateChannelText();
+            });
+    }
 
     if (auto *twitchChannel = dynamic_cast<TwitchChannel *>(channel.get()))
     {
@@ -1247,7 +1266,19 @@ void SplitHeader::updateIcons()
             });
         }
 
-        if (channel->hasModRights() || moderationMode)
+        // YouTube can't tell instantly whether the logged-in account
+        // actually moderates this specific chat (see
+        // YouTubeChannel::hasConfirmedModRights), so use the strict check
+        // there instead of the optimistic hasModRights() every other
+        // platform uses - otherwise this button (and moderation mode
+        // itself) would be handed to any logged-in viewer, not just mods.
+        bool canModerate = channel->hasModRights();
+        if (auto *youtubeChannel = dynamic_cast<YouTubeChannel *>(channel.get()))
+        {
+            canModerate = youtubeChannel->hasConfirmedModRights();
+        }
+
+        if (canModerate || moderationMode)
         {
             this->moderationButton_->show();
         }

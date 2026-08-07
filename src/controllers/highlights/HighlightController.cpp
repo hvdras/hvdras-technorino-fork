@@ -16,6 +16,7 @@
 #include "providers/colors/ColorProvider.hpp"
 #include "providers/kick/KickAccount.hpp"
 #include "providers/twitch/TwitchAccount.hpp"  // IWYU pragma: keep
+#include "providers/youtube/YouTubeAccount.hpp"
 #include "providers/twitch/TwitchBadge.hpp"
 #include "singletons/Settings.hpp"
 
@@ -214,6 +215,21 @@ void rebuildMessageHighlights(Settings &settings,
     {
         HighlightPhrase highlight(
             kickUsername, settings.showSelfHighlightInMentions,
+            settings.enableSelfHighlightTaskbar,
+            settings.enableSelfHighlightSound, false, false,
+            settings.selfHighlightSoundUrl.getValue(),
+            ColorProvider::instance().color(ColorType::SelfHighlight));
+
+        checks.emplace_back(highlightPhraseCheck(highlight));
+    }
+
+    auto youtubeUser = getApp()->getAccounts()->youtube.current();
+    auto youtubeChannelName = youtubeUser->channelName();
+    if (settings.enableSelfHighlight && !youtubeChannelName.isEmpty() &&
+        !youtubeUser->isAnonymous())
+    {
+        HighlightPhrase highlight(
+            youtubeChannelName, settings.showSelfHighlightInMentions,
             settings.enableSelfHighlightTaskbar,
             settings.enableSelfHighlightSound, false, false,
             settings.selfHighlightSoundUrl.getValue(),
@@ -468,6 +484,13 @@ HighlightController::HighlightController(Settings &settings,
         accounts->kick.currentUserChanged, [this, &settings] {
             qCDebug(chatterinoHighlights)
                 << "Rebuild checks because Kick user changed";
+            this->rebuildChecks(settings);
+        });
+
+    this->signalHolder_.managedConnect(
+        accounts->youtube.currentUserChanged, [this, &settings] {
+            qCDebug(chatterinoHighlights)
+                << "Rebuild checks because YouTube user changed";
             this->rebuildChecks(settings);
         });
 

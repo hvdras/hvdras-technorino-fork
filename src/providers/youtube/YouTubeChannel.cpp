@@ -348,10 +348,31 @@ void appendMessageRuns(MessageBuilder &builder, const QJsonArray &runs)
         auto run = runVal.toObject();
         if (run.contains("text"_L1))
         {
-            builder.emplace<TextElement>(
-                run["text"].toString(),
-                MessageElementFlags{MessageElementFlag::Text},
-                MessageColor::Text);
+            auto text = run["text"].toString();
+            if (text.contains(u'@'))
+            {
+                // Route word-by-word through the same @mention detection
+                // Twitch messages use, so a mention becomes clickable (and
+                // opens that user's usercard) if they're still in the
+                // local message history - same lookup UserInfoPopup
+                // already does for YouTube usernames. Only done for runs
+                // that could plausibly contain one, to leave every other
+                // message's rendering untouched.
+                for (const auto &word : text.split(u' '))
+                {
+                    if (word.isEmpty())
+                    {
+                        continue;
+                    }
+                    builder.addWordFromUserMessage(word);
+                }
+            }
+            else
+            {
+                builder.emplace<TextElement>(
+                    text, MessageElementFlags{MessageElementFlag::Text},
+                    MessageColor::Text);
+            }
             continue;
         }
 
@@ -762,6 +783,15 @@ bool YouTubeChannel::hasModRights() const
     // Fall back to the old optimistic heuristic while the real check is
     // still in flight (or couldn't be started, e.g. nobody logged in).
     return !getApp()->getAccounts()->youtube.current()->isAnonymous();
+}
+
+bool YouTubeChannel::hasConfirmedModRights() const
+{
+    if (!this->confirmedModRights_)
+    {
+        const_cast<YouTubeChannel *>(this)->refreshModStatus();
+    }
+    return this->confirmedModRights_.value_or(false);
 }
 
 void YouTubeChannel::refreshModStatus()
