@@ -232,6 +232,60 @@ QString extractMetaContent(const QByteArray &body, const QByteArray &property)
     return value;
 }
 
+/// Finds the end (exclusive) of a JSON value starting at `start` (which
+/// must point at its opening '{' or '['), by tracking brace/bracket depth
+/// and skipping over string literals (respecting escaped quotes). A naive
+/// "find the next `;`" search isn't reliable here: some of these <script>
+/// tags (ytInitialPlayerResponse in particular) contain more JS statements
+/// after the JSON assignment, each ending in their own `;`, before the
+/// tag actually closes - confirmed by that specific case's -1-scoped
+/// semicolon search grabbing an unrelated later statement instead of the
+/// JSON's real end.
+qsizetype findJsonValueEnd(const QByteArray &body, qsizetype start)
+{
+    int depth = 0;
+    bool inString = false;
+    bool escaped = false;
+    for (qsizetype i = start; i < body.size(); ++i)
+    {
+        char c = body.at(i);
+        if (inString)
+        {
+            if (escaped)
+            {
+                escaped = false;
+            }
+            else if (c == '\\')
+            {
+                escaped = true;
+            }
+            else if (c == '"')
+            {
+                inString = false;
+            }
+            continue;
+        }
+
+        if (c == '"')
+        {
+            inString = true;
+        }
+        else if (c == '{' || c == '[')
+        {
+            depth++;
+        }
+        else if (c == '}' || c == ']')
+        {
+            depth--;
+            if (depth == 0)
+            {
+                return i + 1;
+            }
+        }
+    }
+    return -1;
+}
+
 /// Parse a `var <varName> = {...};` inline JSON blob from page HTML.
 /// Returns the JSON document, or null if not found / parse failed.
 QJsonDocument extractInlineJson(const QByteArray &body,
@@ -255,11 +309,7 @@ QJsonDocument extractInlineJson(const QByteArray &body,
         idx += static_cast<int>(marker2.size());
     }
 
-    auto endIdx = body.indexOf(";</script>", idx);
-    if (endIdx == -1)
-    {
-        endIdx = body.indexOf(';', idx);
-    }
+    auto endIdx = findJsonValueEnd(body, idx);
     if (endIdx == -1)
     {
         return {};
