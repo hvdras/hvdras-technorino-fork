@@ -1335,6 +1335,16 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
                 builder->displayName = authorName;
                 builder->userID =
                     renderer["authorExternalChannelId"].toString();
+                {
+                    auto thumbnails = renderer["authorPhoto"]
+                                          .toObject()["thumbnails"]
+                                          .toArray();
+                    if (!thumbnails.isEmpty())
+                    {
+                        builder->authorAvatarUrl =
+                            thumbnails.last().toObject()["url"].toString();
+                    }
+                }
                 builder->messageText = messageText;
                 builder->searchText = authorName % u": "_s % messageText;
 

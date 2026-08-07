@@ -1484,6 +1484,56 @@ void UserInfoPopup::loadAvatar(const QString &userID, const QString &pictureURL,
     }
 }
 
+void UserInfoPopup::loadYouTubeAvatar(const QString &pictureURL)
+{
+    if (pictureURL.isEmpty())
+    {
+        this->ui_.avatarButton->setPixmap(getResources().streamerMode);
+        return;
+    }
+
+    auto filename =
+        getApp()->getPaths().cacheDirectory() + "/" + hashUrl(pictureURL);
+    QFile cacheFile(filename);
+    if (cacheFile.exists())
+    {
+        cacheFile.open(QIODevice::ReadOnly);
+        QPixmap avatar{};
+
+        avatar.loadFromData(cacheFile.readAll());
+        this->ui_.avatarButton->setPixmap(avatar);
+        this->avatarPixmap_ = std::move(avatar);
+    }
+    else
+    {
+        QNetworkRequest req(pictureURL);
+        req.setHeader(QNetworkRequest::UserAgentHeader, "Chatterino");
+        static auto *manager = new QNetworkAccessManager();
+        auto *reply = manager->get(req);
+
+        QObject::connect(reply, &QNetworkReply::finished, this,
+                         [this, reply, filename] {
+                             if (reply->error() == QNetworkReply::NoError)
+                             {
+                                 const auto data = reply->readAll();
+
+                                 QPixmap avatar;
+                                 avatar.loadFromData(data);
+                                 this->ui_.avatarButton->setPixmap(avatar);
+                                 this->saveCacheAvatar(data, filename);
+                                 this->avatarPixmap_ = std::move(avatar);
+                             }
+                             else
+                             {
+                                 this->ui_.avatarButton->setPixmap(QPixmap());
+                             }
+                         });
+    }
+
+    this->helixAvatarUrl_ = pictureURL;
+    this->updateAvatarUrl();
+}
+
 void UserInfoPopup::loadSevenTVAvatar(const QString &userID, bool isKick)
 {
     auto fmt = isKick ? SEVENTV_KICK_USER_API : SEVENTV_TWITCH_USER_API;
@@ -1803,6 +1853,7 @@ void UserInfoPopup::updateYouTubeUserData()
     this->ui_.nameLabel->setProperty("copy-text", this->userName_);
 
     this->youtubeChannelId_.clear();
+    QString avatarUrl;
     if (this->underlyingChannel_)
     {
         for (const auto &message :
@@ -1814,6 +1865,7 @@ void UserInfoPopup::updateYouTubeUserData()
                                            Qt::CaseInsensitive) == 0)
             {
                 this->youtubeChannelId_ = message->userID;
+                avatarUrl = message->authorAvatarUrl;
                 break;
             }
         }
@@ -1832,7 +1884,15 @@ void UserInfoPopup::updateYouTubeUserData()
                                            this->youtubeChannelId_);
     }
 
-    this->ui_.avatarButton->setPixmap(getResources().streamerMode);
+    if (getApp()->getStreamerMode()->isEnabled() &&
+        getSettings()->streamerModeHideUsercardAvatars)
+    {
+        this->ui_.avatarButton->setPixmap(getResources().streamerMode);
+    }
+    else
+    {
+        this->loadYouTubeAvatar(avatarUrl);
+    }
     this->ui_.followageLabel->hide();
     this->ui_.subageLabel->hide();
     this->ui_.liveIndicator->hide();
