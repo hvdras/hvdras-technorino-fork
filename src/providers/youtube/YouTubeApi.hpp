@@ -10,7 +10,9 @@
 #include <QDateTime>
 #include <QString>
 
+#include <chrono>
 #include <functional>
+#include <optional>
 
 namespace chatterino {
 
@@ -42,6 +44,17 @@ public:
                        Callback<QString> cb);
 
     void deleteMessageById(const QString &messageId, Callback<void> cb);
+
+    /// Bans (duration = nullopt) or times out (duration = a length) a user
+    /// from a live chat. On success, the callback receives YouTube's ban
+    /// resource ID - the *only* way to undo it later, since the API has no
+    /// unban-by-channel-ID endpoint.
+    void banUser(const QString &liveChatId, const QString &targetChannelId,
+                std::optional<std::chrono::seconds> duration,
+                Callback<QString> cb);
+
+    /// Undoes a ban/timeout, given the ban resource ID returned by banUser().
+    void unbanUser(const QString &banId, Callback<void> cb);
 
     void setAuth(const QString &authToken);
 

@@ -50,6 +50,7 @@
 #include "providers/emoji/Emojis.hpp"
 #include "providers/IvrApi.hpp"
 #include "providers/kick/KickChannel.hpp"
+#include "providers/youtube/YouTubeChannel.hpp"
 #include "providers/twitch/api/Helix.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
@@ -663,6 +664,7 @@ QString CommandController::execCommand(const QString &textNoEmoji,
                     channel,
                     dynamic_cast<TwitchChannel *>(channel.get()),
                     dynamic_cast<KickChannel *>(channel.get()),
+                    dynamic_cast<YouTubeChannel *>(channel.get()),
                 };
                 return (*command)(ctx);
             }

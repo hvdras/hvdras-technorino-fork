@@ -155,6 +155,62 @@ void YouTubeApi::deleteMessageById(const QString &messageId, Callback<void> cb)
         .execute();
 }
 
+void YouTubeApi::banUser(const QString &liveChatId,
+                         const QString &targetChannelId,
+                         std::optional<std::chrono::seconds> duration,
+                         Callback<QString> cb)
+{
+    QJsonObject bannedUserDetails{
+        {"channelId"_L1, targetChannelId},
+    };
+    QJsonObject snippet{
+        {"liveChatId"_L1, liveChatId},
+        {"type"_L1, duration ? "temporary"_L1 : "permanent"_L1},
+        {"bannedUserDetails"_L1, bannedUserDetails},
+    };
+    if (duration)
+    {
+        snippet.insert("banDurationSeconds"_L1,
+                       static_cast<qint64>(duration->count()));
+    }
+    QJsonObject body{{"snippet"_L1, snippet}};
+
+    NetworkRequest(
+        u"https://www.googleapis.com/youtube/v3/liveChat/bans?part=snippet"_s,
+        NetworkRequestType::Post)
+        .header("Authorization"_ba, "Bearer "_ba + this->authToken_)
+        .json(body)
+        .onError([cb](const NetworkResult &res) {
+            cb(makeUnexpected(formatApiError(res)));
+        })
+        .onSuccess([cb](const NetworkResult &res) {
+            auto id = res.parseJson()["id"_L1].toString();
+            if (id.isEmpty())
+            {
+                cb(makeUnexpected(u"YouTube did not return a ban ID."_s));
+                return;
+            }
+            cb(id);
+        })
+        .execute();
+}
+
+void YouTubeApi::unbanUser(const QString &banId, Callback<void> cb)
+{
+    QString url = u"https://www.googleapis.com/youtube/v3/liveChat/bans?id="_s %
+                 QString::fromUtf8(QUrl::toPercentEncoding(banId));
+
+    NetworkRequest(url, NetworkRequestType::Delete)
+        .header("Authorization"_ba, "Bearer "_ba + this->authToken_)
+        .onError([cb](const NetworkResult &res) {
+            cb(makeUnexpected(formatApiError(res)));
+        })
+        .onSuccess([cb](const NetworkResult & /*res*/) {
+            cb(ExpectedStr<void>{});
+        })
+        .execute();
+}
+
 void YouTubeApi::setAuth(const QString &authToken)
 {
     this->authToken_ = authToken.toUtf8();

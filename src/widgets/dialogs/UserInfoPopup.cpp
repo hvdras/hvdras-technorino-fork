@@ -27,6 +27,8 @@
 #include "providers/twitch/TwitchAccount.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
+#include "providers/youtube/YouTubeAccount.hpp"
+#include "providers/youtube/YouTubeChannel.hpp"
 #include "singletons/Resources.hpp"
 #include "singletons/Settings.hpp"
 #include "singletons/StreamerMode.hpp"
@@ -672,6 +674,16 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
                         this->userName_, Qt::CaseInsensitive) == 0;
                 visible = kickChannel->hasModRights() && !isMyself;
             }
+            else if (auto *youtubeChannel = dynamic_cast<YouTubeChannel *>(
+                         this->underlyingChannel_.get()))
+            {
+                bool isMyself =
+                    !this->youtubeChannelId_.isEmpty() &&
+                    getApp()->getAccounts()->youtube.current()->channelId() ==
+                        this->youtubeChannelId_;
+                visible = youtubeChannel->hasModRights() && !isMyself &&
+                          !this->youtubeChannelId_.isEmpty();
+            }
             lineMod->setVisible(visible);
             timeout->setVisible(visible);
         });
@@ -683,12 +695,19 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
             int arg;
             std::tie(action, arg) = item;
 
+            // YouTube has no way to resolve a display name back to a
+            // channel ID, so its commands need the ID we already resolved
+            // for this usercard, passed via the "id:" convention.
+            QString target = this->isYouTube_
+                                ? u"id:"_s % this->youtubeChannelId_
+                                : this->userName_;
+
             switch (action)
             {
                 case TimeoutWidget::Ban: {
                     if (this->underlyingChannel_)
                     {
-                        QString value = "/ban " + this->userName_;
+                        QString value = "/ban " + target;
                         value = getApp()->getCommands()->execCommand(
                             value, this->underlyingChannel_, false);
 
@@ -699,7 +718,7 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
                 case TimeoutWidget::Unban: {
                     if (this->underlyingChannel_)
                     {
-                        QString value = "/unban " + this->userName_;
+                        QString value = "/unban " + target;
                         value = getApp()->getCommands()->execCommand(
                             value, this->underlyingChannel_, false);
 
@@ -710,7 +729,7 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
                 case TimeoutWidget::Timeout: {
                     if (this->underlyingChannel_)
                     {
-                        QString value = "/timeout " + this->userName_ + " " +
+                        QString value = "/timeout " + target + " " +
                                         QString::number(arg) + 's';
 
                         value = getApp()->getCommands()->execCommand(

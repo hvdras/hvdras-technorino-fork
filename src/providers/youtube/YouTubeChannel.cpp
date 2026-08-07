@@ -537,11 +537,12 @@ MessagePtr makeYouTubeDeletionMessage(const MessagePtr &original)
     return builder.release();
 }
 
-/// Handle a `removeChatItemAction`: a single message was removed by a
-/// moderator (or by the author themselves).
-void handleMessageDeleted(Channel &channel, const QJsonObject &action)
+/// Hides a message and (optionally) posts the "was deleted" system message.
+/// Used both when we see YouTube's own `removeChatItemAction` on a live chat
+/// poll, and optimistically right after our own delete call succeeds -
+/// idempotent so whichever of the two happens second is a no-op.
+void handleMessageDeleted(Channel &channel, const QString &targetItemId)
 {
-    const auto targetItemId = action["targetItemId"].toString();
     if (targetItemId.isEmpty())
     {
         return;
@@ -553,6 +554,11 @@ void handleMessageDeleted(Channel &channel, const QJsonObject &action)
         qCWarning(chatterinoYoutube)
             << "removeChatItemAction targeted unknown message id"
             << targetItemId;
+        return;
+    }
+
+    if (msg->flags.has(MessageFlag::Disabled))
+    {
         return;
     }
 
@@ -663,6 +669,16 @@ void YouTubeChannel::initialize()
 
 YouTubeChannel::~YouTubeChannel() = default;
 
+std::shared_ptr<YouTubeChannel> YouTubeChannel::sharedFromThis()
+{
+    return std::static_pointer_cast<YouTubeChannel>(this->shared_from_this());
+}
+
+std::weak_ptr<YouTubeChannel> YouTubeChannel::weakFromThis()
+{
+    return this->sharedFromThis();
+}
+
 const QString &YouTubeChannel::videoId() const
 {
     return this->videoId_;
@@ -719,7 +735,8 @@ bool YouTubeChannel::hasModRights() const
     return !getApp()->getAccounts()->youtube.current()->isAnonymous();
 }
 
-void YouTubeChannel::deleteMessage(const QString &authorChannelId,
+void YouTubeChannel::deleteMessage(const QString &messageId,
+                                   const QString &authorChannelId,
                                    const QDateTime &timestamp,
                                    const QString &messageText)
 {
@@ -733,11 +750,22 @@ void YouTubeChannel::deleteMessage(const QString &authorChannelId,
         self->addSystemMessage(u"Failed to delete message: " % error);
     };
 
-    auto findAndDelete = [weak, authorChannelId, timestamp, messageText,
-                          reportError](const QString &liveChatId) {
+    this->resolveLiveChatId([weak, messageId, authorChannelId, timestamp,
+                             messageText,
+                             reportError](const ExpectedStr<QString> &idRes) {
+        if (!weak.lock())
+        {
+            return;
+        }
+        if (!idRes)
+        {
+            reportError(idRes.error());
+            return;
+        }
+
         getYouTubeApi()->findMessageId(
-            liveChatId, authorChannelId, timestamp, messageText,
-            [weak, reportError](const ExpectedStr<QString> &res) {
+            *idRes, authorChannelId, timestamp, messageText,
+            [weak, messageId, reportError](const ExpectedStr<QString> &res) {
                 if (!weak.lock())
                 {
                     return;
@@ -748,37 +776,71 @@ void YouTubeChannel::deleteMessage(const QString &authorChannelId,
                     return;
                 }
                 getYouTubeApi()->deleteMessageById(
-                    *res, [reportError](const ExpectedStr<void> &delRes) {
+                    *res, [weak, messageId,
+                           reportError](const ExpectedStr<void> &delRes) {
                         if (!delRes)
                         {
                             reportError(delRes.error());
+                            return;
                         }
+                        auto self = std::static_pointer_cast<YouTubeChannel>(
+                            weak.lock());
+                        if (!self)
+                        {
+                            return;
+                        }
+                        // Hide it immediately instead of waiting for the
+                        // next live chat poll to notice YouTube's own
+                        // removeChatItemAction for it.
+                        handleMessageDeleted(*self, messageId);
                     });
             });
-    };
+    });
+}
 
+void YouTubeChannel::resolveLiveChatId(
+    std::function<void(ExpectedStr<QString>)> cb)
+{
     if (!this->liveChatId_.isEmpty())
     {
-        findAndDelete(this->liveChatId_);
+        cb(this->liveChatId_);
         return;
     }
 
+    auto weak = this->weak_from_this();
     getYouTubeApi()->getLiveChatId(
         this->videoId_,
-        [weak, findAndDelete, reportError](const ExpectedStr<QString> &res) {
+        [weak, cb = std::move(cb)](const ExpectedStr<QString> &res) {
             auto self = std::static_pointer_cast<YouTubeChannel>(weak.lock());
             if (!self)
             {
                 return;
             }
-            if (!res)
+            if (res)
             {
-                reportError(res.error());
-                return;
+                self->liveChatId_ = *res;
             }
-            self->liveChatId_ = *res;
-            findAndDelete(*res);
+            cb(res);
         });
+}
+
+void YouTubeChannel::recordBanId(const QString &targetChannelId,
+                                 const QString &banId)
+{
+    this->banIdsByChannelId_[targetChannelId] = banId;
+}
+
+std::optional<QString> YouTubeChannel::takeBanId(
+    const QString &targetChannelId)
+{
+    auto it = this->banIdsByChannelId_.find(targetChannelId);
+    if (it == this->banIdsByChannelId_.end())
+    {
+        return std::nullopt;
+    }
+    auto banId = it.value();
+    this->banIdsByChannelId_.erase(it);
+    return banId;
 }
 
 void YouTubeChannel::setLive(bool live)
@@ -869,6 +931,7 @@ void YouTubeChannel::fetchChannelLivePage(const QString &handle)
             self->setLive(true);
             self->receivedFirstBatch_ = false;
             self->liveChatId_.clear();
+            self->banIdsByChannelId_.clear();
             self->addSystemMessage(
                 u"YouTube: Live chat found for %1, connecting..."_s.arg(
                     self->videoId_));
@@ -952,6 +1015,7 @@ void YouTubeChannel::fetchWatchPage()
             self->setLive(true);
             self->receivedFirstBatch_ = false;
             self->liveChatId_.clear();
+            self->banIdsByChannelId_.clear();
             self->addSystemMessage(u"YouTube: Live chat found, connecting..."_s);
             self->fetchLiveChat(continuation);
         })
@@ -1104,7 +1168,8 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
                         action["removeChatItemAction"].toObject();
                     !deleteAction.isEmpty())
                 {
-                    handleMessageDeleted(*self, deleteAction);
+                    handleMessageDeleted(
+                        *self, deleteAction["targetItemId"].toString());
                     continue;
                 }
 

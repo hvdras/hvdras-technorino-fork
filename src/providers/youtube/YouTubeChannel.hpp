@@ -5,13 +5,17 @@
 #pragma once
 
 #include "common/Channel.hpp"
+#include "util/Expected.hpp"
 
 #include <pajlada/signals/signal.hpp>
 #include <pajlada/signals/signalholder.hpp>
 #include <QDateTime>
+#include <QHash>
 #include <QString>
 
+#include <functional>
 #include <memory>
+#include <optional>
 
 namespace chatterino {
 
@@ -26,6 +30,9 @@ public:
 
     // Must be called once, immediately after the shared_ptr is created.
     void initialize();
+
+    std::shared_ptr<YouTubeChannel> sharedFromThis();
+    std::weak_ptr<YouTubeChannel> weakFromThis();
 
     const QString &videoId() const;
 
@@ -47,12 +54,29 @@ public:
     /// account to actually be a moderator/owner of this chat - otherwise
     /// the request fails and a system message is posted with the error.
     ///
-    /// The message's own ID (as seen from the unofficial live chat feed
-    /// this channel reads from) isn't a valid ID for the official API, so
-    /// it's looked up by author/timestamp/text first - see
-    /// YouTubeApi::findMessageId.
-    void deleteMessage(const QString &authorChannelId,
+    /// `messageId` is the message's own ID, as seen from the unofficial live
+    /// chat feed this channel reads from - it isn't a valid ID for the
+    /// official API, so the message is looked up there by
+    /// author/timestamp/text first (see YouTubeApi::findMessageId).
+    /// `messageId` is still used to hide the message locally immediately
+    /// after a successful delete, rather than waiting for the next live
+    /// chat poll to notice YouTube's own removal event.
+    void deleteMessage(const QString &messageId, const QString &authorChannelId,
                        const QDateTime &timestamp, const QString &messageText);
+
+    /// Resolves (and caches) the active live chat ID for the current
+    /// broadcast. Used by every moderation action (delete/ban/timeout),
+    /// which all need it but shouldn't each re-resolve it individually.
+    void resolveLiveChatId(std::function<void(ExpectedStr<QString>)> cb);
+
+    /// Remembers the ban resource ID YouTube returned for a given target
+    /// channel, so a later unban can reference it - the official API can
+    /// only unban by ban resource ID, not by channel ID, and has no way to
+    /// look one up after the fact.
+    void recordBanId(const QString &targetChannelId, const QString &banId);
+    /// Returns and forgets the most recent ban ID recorded for a channel in
+    /// this session, if any.
+    std::optional<QString> takeBanId(const QString &targetChannelId);
 
     /// Fired whenever isLive() changes, so the tab's live indicator updates.
     pajlada::Signals::NoArgSignal liveStatusChanged;
@@ -89,6 +113,10 @@ private:
     // first moderation action. Cleared whenever videoId_ changes (i.e. a new
     // connection/broadcast is picked up).
     QString liveChatId_;
+    // Ban resource IDs recorded from successful ban/timeout calls, keyed by
+    // target channel ID, so unban can find them again. In-memory only and
+    // scoped to the current liveChatId_ - cleared alongside it.
+    QHash<QString, QString> banIdsByChannelId_;
 
     pajlada::Signals::SignalHolder signalHolder_;
 };
