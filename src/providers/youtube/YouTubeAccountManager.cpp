@@ -6,6 +6,7 @@
 
 #include "common/QLogging.hpp"
 #include "providers/youtube/YouTubeAccount.hpp"
+#include "util/RapidJsonSerializeQString.hpp"  // IWYU pragma: keep
 #include "util/SharedPtrElementLess.hpp"
 
 #include <pajlada/settings/setting.hpp>
