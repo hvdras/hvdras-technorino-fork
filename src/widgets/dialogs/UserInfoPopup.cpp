@@ -1493,7 +1493,11 @@ void UserInfoPopup::loadYouTubeAvatar(const QString &pictureURL)
 {
     if (pictureURL.isEmpty())
     {
-        this->ui_.avatarButton->setPixmap(getResources().streamerMode);
+        // Not streamer mode - getResources().streamerMode is specifically
+        // that placeholder elsewhere in this file. This is just "we don't
+        // have an avatar URL for this user" (e.g. no message from them
+        // carried one), so leave it blank instead.
+        this->ui_.avatarButton->setPixmap(QPixmap());
         return;
     }
 
