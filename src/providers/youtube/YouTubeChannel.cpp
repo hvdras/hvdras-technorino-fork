@@ -1261,13 +1261,19 @@ void YouTubeChannel::refreshStreamStats()
 
 void YouTubeChannel::scheduleRediscovery()
 {
+    qCWarning(chatterinoYoutube)
+        << "Scheduling rediscovery in" << REDISCOVERY_RETRY_MS << "ms";
     auto weak = this->weak_from_this();
     QTimer::singleShot(REDISCOVERY_RETRY_MS, [weak] {
         auto self = std::static_pointer_cast<YouTubeChannel>(weak.lock());
         if (!self)
         {
+            qCWarning(chatterinoYoutube)
+                << "Rediscovery timer fired but channel is gone";
             return;
         }
+        qCWarning(chatterinoYoutube)
+            << "Rediscovery firing, handle:" << self->handle_;
         if (self->handle_.isEmpty())
         {
             self->fetchWatchPage();
@@ -1475,6 +1481,10 @@ void YouTubeChannel::fetchWatchPage()
 void YouTubeChannel::fetchLiveChat(const QString &continuation)
 {
     auto weak = this->weak_from_this();
+
+    qCWarning(chatterinoYoutube)
+        << "Polling live chat for" << this->videoId_
+        << "continuation length:" << continuation.length();
 
     const QJsonObject requestBody{
         {"context",
@@ -1811,6 +1821,9 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
 
             if (nextContinuation.isEmpty())
             {
+                qCWarning(chatterinoYoutube)
+                    << "Poll succeeded but returned no next continuation - "
+                       "treating as stream ended";
                 self->setLive(false);
                 self->addSystemMessage(
                     u"YouTube: Live chat ended. Will keep checking for a new stream..."_s);
@@ -1818,6 +1831,9 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation)
                 return;
             }
 
+            qCWarning(chatterinoYoutube)
+                << "Poll OK," << actions.size() << "action(s), next poll in"
+                << timeoutMs << "ms";
             self->scheduleNextPoll(nextContinuation, timeoutMs);
         })
         .onError([weak](const NetworkResult &result) {
@@ -1848,10 +1864,14 @@ void YouTubeChannel::scheduleNextPoll(const QString &continuation,
     auto weak = this->weak_from_this();
     QTimer::singleShot(timeoutMs, [weak, continuation] {
         auto self = std::static_pointer_cast<YouTubeChannel>(weak.lock());
-        if (self)
+        if (!self)
         {
-            self->fetchLiveChat(continuation);
+            qCWarning(chatterinoYoutube)
+                << "Poll timer fired but channel is gone - not "
+                   "rescheduling";
+            return;
         }
+        self->fetchLiveChat(continuation);
     });
 }
 
