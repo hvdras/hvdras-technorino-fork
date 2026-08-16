@@ -632,8 +632,7 @@ bool hasBadge(const QString &badges, const QString &badgeName)
 }
 
 void appendRepeatedMessageCounter(MessageBuilder &builder, Channel *channel,
-                                  const QVariantMap &tags,
-                                  const QString &content,
+                                  Communi::TagsRef tags, const QString &content,
                                   bool senderIsBroadcaster)
 {
     auto *detector = getApp()->getRepeatedMessageDetector();
@@ -642,15 +641,15 @@ void appendRepeatedMessageCounter(MessageBuilder &builder, Channel *channel,
         return;
     }
 
-    const auto badges = tags.value("badges").toString();
+    const auto badges = tags.getOrEmpty("badges");
     const RepeatedMessageCheck check{
-        .channelID = tags.value("room-id").toString(),
-        .userID = tags.value("user-id").toString(),
-        .messageID = tags.value("id").toString(),
+        .channelID = tags.getOrEmpty("room-id"),
+        .userID = tags.getOrEmpty("user-id"),
+        .messageID = tags.getOrEmpty("id"),
         .message = content,
-        .historical = tags.contains("historical"),
+        .historical = tags.has("historical"),
         .channelCanModerate = channel->hasModRights(),
-        .senderIsModerator = tags.value("user-type").toString() == u"mod"_s ||
+        .senderIsModerator = tags.getOrEmpty("user-type") == u"mod"_s ||
                              hasBadge(badges, u"moderator"_s),
         .senderIsBroadcaster = senderIsBroadcaster ||
                                hasBadge(badges, u"broadcaster"_s),
