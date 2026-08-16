@@ -108,15 +108,24 @@ def get_unreleased_commits():
     return unreleased
 
 
-def get_current_stable():
-    p = subprocess.run(
-        ["git", "describe", "--tags", "--abbrev=0", "--match", "v7.*.[0-9]"],
-        cwd=os.path.dirname(os.path.realpath(__file__)),
-        text=True,
-        check=True,
-        capture_output=True,
-    )
-    return p.stdout.strip()
+def get_current_stable() -> str | None:
+    # Unlike get_last_version_tag(), this fork's origin doesn't carry the
+    # v7.x.y-style tags this match pattern expects (only nightly-build and
+    # v7.5.5-technorino-1, which doesn't match it either) - without this
+    # try/except, git describe's non-zero exit crashes the whole script
+    # via check=True, which aborts before the GITHUB_OUTPUT delimiter is
+    # ever closed and fails the release step.
+    try:
+        p = subprocess.run(
+            ["git", "describe", "--tags", "--abbrev=0", "--match", "v7.*.[0-9]"],
+            cwd=os.path.dirname(os.path.realpath(__file__)),
+            text=True,
+            check=True,
+            capture_output=True,
+        )
+        return p.stdout.strip()
+    except subprocess.CalledProcessError:
+        return None
 
 
 unreleased_lines = get_unreleased_commits()
@@ -128,11 +137,14 @@ args = parser.parse_args()
 
 
 print("> [!WARNING]")
-print(
-    "> This is an experimental version that may break. "
-    "If you're looking for the latest stable release, see "
-    f"https://github.com/SevenTV/chatterino7/releases/tag/{get_current_stable()}.\n"
+current_stable = get_current_stable()
+stable_note = (
+    " If you're looking for the latest stable release, see "
+    f"https://github.com/SevenTV/chatterino7/releases/tag/{current_stable}."
+    if current_stable
+    else ""
 )
+print(f"> This is an experimental version that may break.{stable_note}\n")
 
 print("### Downloads\n")
 
