@@ -1363,7 +1363,7 @@ void YouTubeChannel::fetchChannelLivePage(const QString &handle)
                     self->videoId_));
             self->fetchLiveChat(continuation, generation);
         })
-        .onError([weak](const NetworkResult &result) {
+        .onError([weak, generation](const NetworkResult &result) {
             auto self =
                 std::static_pointer_cast<YouTubeChannel>(weak.lock());
             if (!self)
@@ -1459,7 +1459,7 @@ void YouTubeChannel::fetchWatchPage()
             self->addSystemMessage(u"YouTube: Live chat found, connecting..."_s);
             self->fetchLiveChat(continuation, generation);
         })
-        .onError([weak](const NetworkResult &result) {
+        .onError([weak, generation](const NetworkResult &result) {
             auto self =
                 std::static_pointer_cast<YouTubeChannel>(weak.lock());
             if (!self)
