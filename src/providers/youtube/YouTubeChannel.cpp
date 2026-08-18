@@ -1376,10 +1376,10 @@ void YouTubeChannel::fetchChannelLivePage(const QString &handle)
             self->addSystemMessage(
                 u"YouTube: Failed to load channel (%1). Retrying..."_s.arg(
                     result.formatError()));
-            QTimer::singleShot(ERROR_RETRY_MS, [weak] {
+            QTimer::singleShot(ERROR_RETRY_MS, [weak, generation] {
                 auto self =
                     std::static_pointer_cast<YouTubeChannel>(weak.lock());
-                if (self)
+                if (self && generation == self->connectionGeneration_)
                 {
                     self->fetchChannelLivePage(self->handle_);
                 }
@@ -1472,10 +1472,10 @@ void YouTubeChannel::fetchWatchPage()
             self->addSystemMessage(
                 u"YouTube: Failed to load page (%1). Retrying..."_s.arg(
                     result.formatError()));
-            QTimer::singleShot(ERROR_RETRY_MS, [weak] {
+            QTimer::singleShot(ERROR_RETRY_MS, [weak, generation] {
                 auto self =
                     std::static_pointer_cast<YouTubeChannel>(weak.lock());
-                if (self)
+                if (self && generation == self->connectionGeneration_)
                 {
                     self->fetchWatchPage();
                 }
@@ -1554,10 +1554,10 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation, int generation)
                     << result.status().value_or(0) << ")";
                 self->addSystemMessage(
                     u"YouTube: Chat API returned an invalid response. Retrying..."_s);
-                QTimer::singleShot(ERROR_RETRY_MS, [weak] {
+                QTimer::singleShot(ERROR_RETRY_MS, [weak, generation] {
                     auto self =
                         std::static_pointer_cast<YouTubeChannel>(weak.lock());
-                    if (self)
+                    if (self && generation == self->connectionGeneration_)
                     {
                         self->fetchWatchPage();
                     }
@@ -1867,10 +1867,10 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation, int generation)
             qCWarning(chatterinoYoutube)
                 << "Live chat request failed:" << result.formatError();
             // On error, re-fetch the watch page to get a fresh token
-            QTimer::singleShot(ERROR_RETRY_MS, [weak] {
+            QTimer::singleShot(ERROR_RETRY_MS, [weak, generation] {
                 auto self =
                     std::static_pointer_cast<YouTubeChannel>(weak.lock());
-                if (self)
+                if (self && generation == self->connectionGeneration_)
                 {
                     self->fetchWatchPage();
                 }
