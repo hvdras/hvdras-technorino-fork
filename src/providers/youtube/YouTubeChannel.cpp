@@ -920,6 +920,11 @@ const QString &YouTubeChannel::videoId() const
     return this->videoId_;
 }
 
+const QString &YouTubeChannel::handle() const
+{
+    return this->handle_;
+}
+
 const QString &YouTubeChannel::title() const
 {
     return this->title_;
