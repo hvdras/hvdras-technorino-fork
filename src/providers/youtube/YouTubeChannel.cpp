@@ -6,6 +6,7 @@
 
 #include "Application.hpp"
 #include "common/enums/MessageContext.hpp"
+#include "common/network/NetworkManager.hpp"
 #include "common/network/NetworkRequest.hpp"
 #include "common/network/NetworkResult.hpp"
 #include "common/QLogging.hpp"
@@ -123,9 +124,27 @@ void armStuckRequestWatchdog(std::weak_ptr<Channel> weak, int generation,
             *responded = true;
             qCWarning(chatterinoYoutube)
                 << "Request never completed (stuck connection) - "
-                   "recovering";
+                   "resetting connections and recovering";
             self->addSystemMessage(
                 u"YouTube: Connection appears stuck. Reconnecting..."_s);
+
+            // A stuck request is usually Qt reusing a dead/wedged
+            // persistent connection to the host - simply abandoning it and
+            // issuing a new request via `recover` below tends to land on
+            // that same wedged connection and hang identically forever,
+            // since there's no API to cancel an individual in-flight
+            // NetworkRequest. Clearing the whole connection cache forces a
+            // fresh physical connection on the next request instead. Must
+            // run on the access manager's own thread (NetworkManager::
+            // workerThread), hence the queued invoke rather than calling it
+            // directly here.
+            if (auto *am = NetworkManager::accessManager)
+            {
+                QMetaObject::invokeMethod(
+                    am, [am] { am->clearConnectionCache(); },
+                    Qt::QueuedConnection);
+            }
+
             recover(*self);
         });
 }
