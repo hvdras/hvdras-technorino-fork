@@ -1997,6 +1997,7 @@ std::pair<MessagePtrMut, HighlightAlert> MessageBuilder::makeIrcMessage(
         for (const auto &gifOccurrence : twitchGifs)
         {
             builder.emplace<TwitchGifElement>(gifOccurrence.ptr,
+                                              gifOccurrence.fallbackPtr,
                                               MessageElementFlag::TwitchGif);
         }
     }

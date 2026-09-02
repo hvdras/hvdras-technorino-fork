@@ -562,7 +562,11 @@ class TwitchGifElement : public MessageElement
 public:
     static constexpr std::string_view TYPE = "twitch-gif";
 
-    TwitchGifElement(const EmotePtr &data, MessageElementFlags flags_,
+    /// `fallbackData`, if non-null, is a second rendition of the same GIF
+    /// (Twitch's original, undownsized quality) tried if `data`'s own image
+    /// fails to load - see TwitchEmoteOccurrence::fallbackPtr.
+    TwitchGifElement(const EmotePtr &data, const EmotePtr &fallbackData,
+                     MessageElementFlags flags_,
                      const MessageColor &textElementColor = MessageColor::Text);
 
     void addToContainer(MessageLayoutContainer &container,
@@ -581,6 +585,7 @@ private:
     bool usingFallbackColor_ = false;
 
     EmotePtr emote_;
+    EmotePtr fallbackEmote_;
 };
 
 // A LayeredEmoteElement represents multiple Emotes layered on top of each other.

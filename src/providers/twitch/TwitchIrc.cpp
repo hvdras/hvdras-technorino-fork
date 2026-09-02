@@ -136,8 +136,8 @@ void appendTwitchGifOccurrence(const QString &gif,
 
     auto gifId = parts.at(1);
     // Defensive: rejoin in case the URL itself ever contains a '|'.
-    auto gifUrl = parts.mid(2).join('|');
-    if (gifId.isEmpty() || gifUrl.isEmpty())
+    auto originalUrl = parts.mid(2).join('|');
+    if (gifId.isEmpty() || originalUrl.isEmpty())
     {
         return;
     }
@@ -148,15 +148,18 @@ void appendTwitchGifOccurrence(const QString &gif,
     // original, full-size rendition, which for a typical multi-second,
     // many-frame GIF easily decodes to tens of MB - past the 20MB in-RAM
     // cap Image::actuallyLoad() enforces for every image in the app (which
-    // silently falls back to the placeholder text when hit), and slow to
-    // even download in the first place. Prefer the downsized rendition
-    // when the URL looks like a standard giphy media URL; if that variant
-    // doesn't exist for a given GIF, the request just 404s and falls back
-    // to the placeholder text exactly as it otherwise would.
-    if (gifUrl.contains(QStringLiteral("giphy.com/media/")))
+    // silently marks the load as failed when hit), and slow to even
+    // download in the first place. Prefer the downsized rendition when the
+    // URL looks like a standard giphy media URL - but in practice it still
+    // falls back to text close to half the time relying on this alone
+    // (exact cause unconfirmed - Image's error logging didn't exist until
+    // now), so TwitchGifElement also retries the original URL if this one
+    // fails to load, before giving up and falling back to text.
+    auto downsizedUrl = originalUrl;
+    if (downsizedUrl.contains(QStringLiteral("giphy.com/media/")))
     {
-        gifUrl.replace(QStringLiteral("/giphy.gif"),
-                       QStringLiteral("/giphy-downsized.gif"));
+        downsizedUrl.replace(QStringLiteral("/giphy.gif"),
+                             QStringLiteral("/giphy-downsized.gif"));
     }
 
     auto name = EmoteName{originalMessage.mid(start, end - start + 1)};
@@ -164,15 +167,22 @@ void appendTwitchGifOccurrence(const QString &gif,
     static std::unordered_map<EmoteId, std::weak_ptr<const Emote>> cache;
     static std::mutex cacheMutex;
 
-    auto id = EmoteId{gifId};
-    auto emote = cachedOrMakeEmotePtr(
-        Emote{
-            .name = name,
-            .images = ImageSet{Image::fromUrl({gifUrl}, 1, {160, 120})},
-            .tooltip = Tooltip{name.string},
-            .id = id,
-        },
-        cache, cacheMutex, id);
+    auto makeGifEmote = [&](const QString &url, const QString &idSuffix) {
+        auto id = EmoteId{gifId + idSuffix};
+        return cachedOrMakeEmotePtr(
+            Emote{
+                .name = name,
+                .images = ImageSet{Image::fromUrl({url}, 1, {160, 120})},
+                .tooltip = Tooltip{name.string},
+                .id = id,
+            },
+            cache, cacheMutex, id);
+    };
+
+    auto emote = makeGifEmote(downsizedUrl, QString());
+    auto fallbackEmote = downsizedUrl == originalUrl
+                             ? nullptr
+                             : makeGifEmote(originalUrl, QStringLiteral("-orig"));
 
     vec.push_back(TwitchEmoteOccurrence{
         start,
@@ -180,6 +190,7 @@ void appendTwitchGifOccurrence(const QString &gif,
         emote,
         name,
         true,
+        fallbackEmote,
     });
 }
 

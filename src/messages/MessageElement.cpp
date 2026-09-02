@@ -377,11 +377,13 @@ std::unique_ptr<MessageElement> EmoteElement::clone() const
 
 // TWITCH GIF
 TwitchGifElement::TwitchGifElement(const EmotePtr &emote,
+                                   const EmotePtr &fallbackEmote,
                                    MessageElementFlags flags,
                                    const MessageColor &textElementColor)
     : MessageElement(flags)
     , textColor_(textElementColor)
     , emote_(emote)
+    , fallbackEmote_(fallbackEmote)
 {
     this->setTooltip(emote->tooltip.string);
 }
@@ -401,8 +403,17 @@ void TwitchGifElement::addToContainer(MessageLayoutContainer &container,
 
     if (ctx.flags.has(MessageElementFlag::TwitchGifImage))
     {
-        auto image =
+        ImagePtr image =
             this->emote_->images.getImageOrLoaded(container.getImageScale());
+
+        if (image->isEmpty() && this->fallbackEmote_)
+        {
+            // The preferred (downsized) rendition failed to load - e.g.
+            // Giphy doesn't have one for this particular GIF - fall back to
+            // the original quality before giving up on the image entirely.
+            image = this->fallbackEmote_->images.getImageOrLoaded(
+                container.getImageScale());
+        }
 
         if (image->isEmpty())
         {
@@ -471,7 +482,8 @@ std::string_view TwitchGifElement::type() const
 std::unique_ptr<MessageElement> TwitchGifElement::clone() const
 {
     auto elem = std::make_unique<TwitchGifElement>(
-        this->emote_, this->getFlags(), this->textColor_);
+        this->emote_, this->fallbackEmote_, this->getFlags(),
+        this->textColor_);
     elem->cloneFrom(*this);
     return elem;
 }

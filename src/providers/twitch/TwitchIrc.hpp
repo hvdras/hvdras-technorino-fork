@@ -26,6 +26,12 @@ struct TwitchEmoteOccurrence {
     /// instead of an EmoteElement so it has its own visibility/size
     /// settings. See parseTwitchGifs.
     bool isGif = false;
+    /// For a GIF occurrence, the same GIF at its original (full-size,
+    /// undownsized) quality - tried if `ptr`'s downsized rendition fails to
+    /// load (e.g. Giphy doesn't have a "downsized" variant for it), before
+    /// giving up and falling back to text entirely. Null for real emote
+    /// occurrences.
+    EmotePtr fallbackPtr;
 
     bool operator==(const TwitchEmoteOccurrence &other) const
     {
