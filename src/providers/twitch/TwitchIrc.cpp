@@ -142,6 +142,23 @@ void appendTwitchGifOccurrence(const QString &gif,
         return;
     }
 
+    // Giphy serves several size variants of the same GIF at the same path,
+    // differing only in filename (e.g. "giphy-downsized.gif" instead of
+    // the original "giphy.gif"). Twitch's GIF picker always sends the
+    // original, full-size rendition, which for a typical multi-second,
+    // many-frame GIF easily decodes to tens of MB - past the 20MB in-RAM
+    // cap Image::actuallyLoad() enforces for every image in the app (which
+    // silently falls back to the placeholder text when hit), and slow to
+    // even download in the first place. Prefer the downsized rendition
+    // when the URL looks like a standard giphy media URL; if that variant
+    // doesn't exist for a given GIF, the request just 404s and falls back
+    // to the placeholder text exactly as it otherwise would.
+    if (gifUrl.contains(QStringLiteral("giphy.com/media/")))
+    {
+        gifUrl.replace(QStringLiteral("/giphy.gif"),
+                       QStringLiteral("/giphy-downsized.gif"));
+    }
+
     auto name = EmoteName{originalMessage.mid(start, end - start + 1)};
 
     static std::unordered_map<EmoteId, std::weak_ptr<const Emote>> cache;
