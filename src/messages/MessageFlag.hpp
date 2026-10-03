@@ -78,9 +78,11 @@ enum class MessageFlag : std::int64_t {
     InvalidReplyTarget = (1LL << 42),
     WatchStreak = (1LL << 43),
     Announcement = (1LL << 44),
-    RepeatedMessage = (1LL << 45),
     /// Notifications that do not yet have special handling/categorization
-    UncategorizedNotification = (1LL << 46),
+    UncategorizedNotification = (1LL << 45),
+    /// The message was detected as ASCII art and has its layout width limited to the default web chat width.
+    AsciiArt = (1LL << 46),
+    RepeatedMessage = (1LL << 47),
 };
 using MessageFlags = FlagsEnum<MessageFlag>;
 
