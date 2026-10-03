@@ -17,6 +17,7 @@
 #include "providers/twitch/TwitchCommon.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
 #include "singletons/Fonts.hpp"
+#include "singletons/ImageUploader.hpp"
 #include "controllers/accounts/AccountController.hpp"
 #include "providers/translation/Translator.hpp"
 #include "providers/twitch/api/Helix.hpp"
