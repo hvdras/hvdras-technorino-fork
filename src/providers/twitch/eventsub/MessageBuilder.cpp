@@ -673,30 +673,6 @@ std::pair<MessagePtr, HighlightAlert> makeAutomodHoldMessage(
         ->setLink({Link::AutoModDeny, event.messageID.qt()});
     builder.emplace<LinebreakElement>(MessageElementFlag::Text);
 
-    builder.setMessageAndSearchText(
-        u"AutoMod: Held a message for reason: " % reason %
-        u". Allow will post it in chat. Allow Deny");
-
-    return builder.release();
-}
-
-MessagePtr makeAutomodHoldMessageBody(
-    TwitchChannel *channel, const QDateTime &time,
-    const lib::payload::automod_message_hold::v2::Event &event)
-{
-    EventSubMessageBuilder builder(channel);
-    builder->serverReceivedTime = time;
-    // Set id so nuke can extract the automod message ID for manageAutoModMessages
-    builder->id = u"automod_" % event.messageID.qt();
-    builder->flags.set(MessageFlag::PubSub, MessageFlag::ModerationAction,
-                       MessageFlag::AutoMod,
-                       MessageFlag::AutoModOffendingMessage);
-    builder->flags.set(
-        MessageFlag::AutoModBlockedTerm,
-        std::holds_alternative<lib::automod::BlockedTermReason>(event.reason));
-
-    // Builder for offender's message
-    builder->channelName = event.broadcasterUserLogin.qt();
     builder
         .emplace<TextElement>(u'#' + event.broadcasterUserLogin.qt(),
                               MessageElementFlag::ChannelName,
@@ -705,7 +681,6 @@ MessagePtr makeAutomodHoldMessageBody(
     builder.emplace<TimestampElement>(time.time());
     builder.emplace<TwitchModerationElement>();
     builder->loginName = event.userLogin.qt();
-    builder->userID = event.userID.qt();
 
     auto displayName = localizedDisplayName(event);
     // sender username
