@@ -461,6 +461,10 @@ set(SOURCE_FILES
         providers/kick/KickMessageBuilder.cpp
         providers/kick/KickMessageBuilder.hpp
 
+        providers/kick/ws/KickCentrifugoManager.cpp
+        providers/kick/ws/KickPusherManager.cpp
+        providers/kick/ws/KickWebSocketCommon.cpp
+
         providers/youtube/YouTubeAccount.cpp
         providers/youtube/YouTubeAccount.hpp
         providers/youtube/YouTubeAccountManager.cpp
