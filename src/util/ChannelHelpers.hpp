@@ -87,8 +87,13 @@ void addOrReplaceChannelTimeout(const Buf &buffer, MessagePtr message,
             if (!message->flags.has(MessageFlag::PubSub) &&
                 s->flags.has(MessageFlag::PubSub))
             {
-                shouldAddMessage =
-                    timeoutStackStyle == TimeoutStackStyle::DontStack;
+                shouldAddMessage = false;
+                break;
+            }
+
+            if (timeoutStackStyle == TimeoutStackStyle::DontStack)
+            {
+                // Break here rather than at the start so that deduplication can run first.
                 break;
             }
 
@@ -198,7 +203,8 @@ void addOrReplaceChannelClear(const Buffer &buffer, MessagePtr message,
         uint32_t count = s->count + 1;
 
         auto replacement = MessageBuilder::makeClearChatMessage(
-            message->serverReceivedTime, message->timeoutUser, count);
+            message->serverReceivedTime, message->timeoutUser,
+            message->channelName, count);
         replacement->flags = message->flags;
 
         replaceMessage(i, s, replacement);

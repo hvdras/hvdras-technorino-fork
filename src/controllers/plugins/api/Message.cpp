@@ -11,6 +11,7 @@
 #    include "messages/Message.hpp"
 #    include "messages/MessageElement.hpp"
 
+#    include <QJsonDocument>
 #    include <sol/sol.hpp>
 
 namespace {
@@ -220,6 +221,10 @@ std::unique_ptr<MessageElement> elementFromTable(const sol::table &tbl)
     assert(el);
 
     el->setTrailingSpace(tbl.get_or("trailing_space", true));
+    if (auto exhaustiveFlags = tbl.get<std::optional<bool>>("exhaustive_flags"))
+    {
+        el->exhaustiveFlags = *exhaustiveFlags;
+    }
 
     auto link = tbl.get<sol::optional<Link>>("link");
     if (link)
@@ -586,6 +591,10 @@ void createUserType(sol::table &c2)
         "type", sol::property([](const ElementRef &el) {
             return el.cref().type();
         }),
+        "to_json",
+        [](const ElementRef &el) {
+            return QJsonDocument(el.cref().toJson()).toJson();
+        },
         "flags", sol::property([](const ElementRef &el) {
             return el.cref().getFlags().value();
         }),
@@ -606,6 +615,9 @@ void createUserType(sol::table &c2)
                 }
                 setLinkOn(&el.ref(), link);
             }),
+        "exhaustive_flags", sol::property([](const ElementRef &el) {
+            return el.cref().exhaustiveFlags;
+        }),
         "tooltip",
         sol::property(
             [](const ElementRef &el) {
@@ -700,16 +712,6 @@ void createUserType(sol::table &c2)
                 // flags are always mutable
                 msg->flags = f;
             }),
-        "parse_time",
-        sol::property(
-            [](Message *msg) {
-                return QDateTime(QDate::currentDate(), msg->parseTime)
-                    .toMSecsSinceEpoch();
-            },
-            [](Message *msg, qint64 ms) {
-                checkWritable(msg);
-                msg->parseTime = datetimeFromOffset(ms).time();
-            }),
         "id", memberAccessor<&Message::id>(),                         //
         "search_text", memberAccessor<&Message::searchText>(),        //
         "message_text", memberAccessor<&Message::messageText>(),      //
@@ -767,6 +769,12 @@ void createUserType(sol::table &c2)
         },
         "append_element",
         sol::overload(
+            // Message:append_element(MessageElement)
+            // Create a clone of the given element and add it to the message
+            [](Message *msg, ElementRef &element) {
+                checkWritable(msg);
+                msg->elements.emplace_back(element.constElement()->clone());
+            },
             // Message:append_element(MessageElementInit)
             // Create a new element
             [](Message *msg, const sol::table &tbl) {
@@ -776,12 +784,6 @@ void createUserType(sol::table &c2)
                 {
                     msg->elements.emplace_back(std::move(el));
                 }
-            },
-            // Message:append_element(MessageElement)
-            // Create a clone of the given element and add it to the message
-            [](Message *msg, ElementRef &element) {
-                checkWritable(msg);
-                msg->elements.emplace_back(element.constElement()->clone());
             }),
         "clone",
         [](const Message &message) {
@@ -799,13 +801,6 @@ std::shared_ptr<Message> messageFromTable(const sol::table &tbl)
 {
     auto msg = std::make_shared<Message>();
     msg->flags = tbl.get_or("flags", MessageFlag::None);
-
-    // This takes a UTC offset (not the milliseconds since the start of the day)
-    auto parseTime = tbl.get<std::optional<qint64>>("parse_time");
-    if (parseTime)
-    {
-        msg->parseTime = datetimeFromOffset(*parseTime).time();
-    }
 
     msg->id = tbl.get_or("id", QString{});
     msg->searchText = tbl.get_or("search_text", QString{});

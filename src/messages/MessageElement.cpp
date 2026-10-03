@@ -27,7 +27,6 @@
 #include <QJsonObject>
 #include <QJsonValue>
 
-#include <algorithm>
 #include <memory>
 #include <utility>
 
@@ -72,22 +71,6 @@ EmotePtr getKickBadge()
     return ptr;
 }
 
-EmotePtr getTwitchBadge()
-{
-    static EmotePtr ptr = std::make_shared<const Emote>(Emote{
-        .name = {u"Twitch"_s},
-        .images =
-            ImageSet{
-                Image::fromUrl({u":/badges/platform-twitch-18.webp"_s}, 1.0,
-                               {18, 18}),
-                Image::fromUrl({u":/badges/platform-twitch-36.webp"_s}, .5,
-                               {36, 36}),
-            },
-        .tooltip = Tooltip{},
-    });
-    return ptr;
-}
-
 EmotePtr getYouTubeBadge()
 {
     static EmotePtr ptr = std::make_shared<const Emote>(Emote{
@@ -97,6 +80,22 @@ EmotePtr getYouTubeBadge()
                 Image::fromUrl({u":/badges/platform-youtube-18.png"_s}, 1.0,
                                {18, 18}),
                 Image::fromUrl({u":/badges/platform-youtube-36.png"_s}, .5,
+                               {36, 36}),
+            },
+        .tooltip = Tooltip{},
+    });
+    return ptr;
+}
+
+EmotePtr getTwitchBadge()
+{
+    static EmotePtr ptr = std::make_shared<const Emote>(Emote{
+        .name = {u"Twitch"_s},
+        .images =
+            ImageSet{
+                Image::fromUrl({u":/badges/platform-twitch-18.webp"_s}, 1.0,
+                               {18, 18}),
+                Image::fromUrl({u":/badges/platform-twitch-36.webp"_s}, .5,
                                {36, 36}),
             },
         .tooltip = Tooltip{},
@@ -166,11 +165,18 @@ void MessageElement::cloneFrom(const MessageElement &source)
     this->tooltip_ = source.tooltip_;
     this->flags_ = source.flags_;
     this->trailingSpace = source.trailingSpace;
+    this->exhaustiveFlags = source.exhaustiveFlags;
+}
+
+bool MessageElement::matchesFlags(MessageElementFlags contextFlags) const
+{
+    return this->exhaustiveFlags ? contextFlags.hasAll(this->getFlags())
+                                 : contextFlags.hasAny(this->getFlags());
 }
 
 QJsonObject MessageElement::toJson() const
 {
-    return {
+    QJsonObject msg{
         {"trailingSpace"_L1, this->trailingSpace},
         {
             "link"_L1,
@@ -182,6 +188,13 @@ QJsonObject MessageElement::toJson() const
         {"tooltip"_L1, this->tooltip_},
         {"flags"_L1, qmagicenum::enumFlagsName(this->flags_.value())},
     };
+
+    if (this->exhaustiveFlags)
+    {
+        msg["exhaustiveFlags"_L1] = this->exhaustiveFlags;
+    }
+
+    return msg;
 }
 
 // IMAGE
@@ -189,12 +202,13 @@ ImageElement::ImageElement(ImagePtr image, MessageElementFlags flags)
     : MessageElement(flags)
     , image_(std::move(image))
 {
+    assert(image_ != nullptr);
 }
 
 void ImageElement::addToContainer(MessageLayoutContainer &container,
                                   const MessageLayoutContext &ctx)
 {
-    if (ctx.flags.hasAny(this->getFlags()))
+    if (this->matchesFlags(ctx.flags))
     {
         container.addElement(new ImageLayoutElement(
             *this, this->image_, this->image_->size() * container.getScale()));
@@ -240,7 +254,7 @@ CircularImageElement::CircularImageElement(ImagePtr image, int padding,
 void CircularImageElement::addToContainer(MessageLayoutContainer &container,
                                           const MessageLayoutContext &ctx)
 {
-    if (ctx.flags.hasAny(this->getFlags()))
+    if (this->matchesFlags(ctx.flags))
     {
         auto imgSize = QSize(this->image_->width(), this->image_->height()) *
                        container.getScale();
@@ -375,119 +389,6 @@ std::unique_ptr<MessageElement> EmoteElement::clone() const
     return elem;
 }
 
-// TWITCH GIF
-TwitchGifElement::TwitchGifElement(const EmotePtr &emote,
-                                   const EmotePtr &fallbackEmote,
-                                   MessageElementFlags flags,
-                                   const MessageColor &textElementColor)
-    : MessageElement(flags)
-    , textColor_(textElementColor)
-    , emote_(emote)
-    , fallbackEmote_(fallbackEmote)
-{
-    this->setTooltip(emote->tooltip.string);
-}
-
-EmotePtr TwitchGifElement::getEmote() const
-{
-    return this->emote_;
-}
-
-void TwitchGifElement::addToContainer(MessageLayoutContainer &container,
-                                      const MessageLayoutContext &ctx)
-{
-    if (ctx.flags.hasNone(this->getFlags()))
-    {
-        return;
-    }
-
-    if (ctx.flags.has(MessageElementFlag::TwitchGifImage))
-    {
-        ImagePtr image =
-            this->emote_->images.getImageOrLoaded(container.getImageScale());
-
-        if (image->isEmpty() && this->fallbackEmote_)
-        {
-            // The preferred (downsized) rendition failed to load - e.g.
-            // Giphy doesn't have one for this particular GIF - fall back to
-            // the original quality before giving up on the image entirely.
-            image = this->fallbackEmote_->images.getImageOrLoaded(
-                container.getImageScale());
-        }
-
-        if (image->isEmpty())
-        {
-            this->ensureText(true);
-        }
-        else
-        {
-            auto naturalSize = image->size();
-            qreal targetHeight =
-                std::max(16, getSettings()->twitchGifMessageSize.getValue());
-            qreal heightScale = naturalSize.height() > 0
-                                    ? targetHeight / naturalSize.height()
-                                    : 1.0;
-
-            auto size = naturalSize * heightScale * container.getScale();
-
-            container.addElement(new ImageLayoutElement(*this, image, size));
-            return;
-        }
-    }
-    else
-    {
-        this->ensureText(false);
-    }
-
-    auto textCtx = ctx;
-    textCtx.flags = MessageElementFlag::Misc;
-    this->textElement_->addToContainer(container, textCtx);
-}
-
-void TwitchGifElement::ensureText(bool asFallback)
-{
-    if (this->textElement_ && asFallback == this->usingFallbackColor_)
-    {
-        return;
-    }
-
-    auto color = this->textColor_;
-    if (asFallback)
-    {
-        color = MessageColor::System;
-    }
-    this->textElement_ = std::make_unique<TextElement>(
-        this->emote_->getCopyString(), MessageElementFlag::Misc, color);
-    this->usingFallbackColor_ = asFallback;
-}
-
-QJsonObject TwitchGifElement::toJson() const
-{
-    auto base = MessageElement::toJson();
-    base["type"_L1] = u"TwitchGifElement"_s;
-    base["emote"_L1] = this->emote_->toJson();
-    if (this->textElement_)
-    {
-        base["text"_L1] = this->textElement_->toJson();
-    }
-
-    return base;
-}
-
-std::string_view TwitchGifElement::type() const
-{
-    return std::remove_pointer_t<decltype(this)>::TYPE;
-}
-
-std::unique_ptr<MessageElement> TwitchGifElement::clone() const
-{
-    auto elem = std::make_unique<TwitchGifElement>(
-        this->emote_, this->fallbackEmote_, this->getFlags(),
-        this->textColor_);
-    elem->cloneFrom(*this);
-    return elem;
-}
-
 LayeredEmoteElement::LayeredEmoteElement(
     std::vector<LayeredEmoteElement::Emote> &&emotes, MessageElementFlags flags,
     const MessageColor &textElementColor)
@@ -507,7 +408,7 @@ void LayeredEmoteElement::addEmoteLayer(const LayeredEmoteElement::Emote &emote)
 void LayeredEmoteElement::addToContainer(MessageLayoutContainer &container,
                                          const MessageLayoutContext &ctx)
 {
-    if (ctx.flags.hasAny(this->getFlags()))
+    if (this->matchesFlags(ctx.flags))
     {
         if (ctx.flags.has(MessageElementFlag::EmoteImage))
         {
@@ -713,7 +614,7 @@ BadgeElement::BadgeElement(const EmotePtr &emote, MessageElementFlags flags)
 void BadgeElement::addToContainer(MessageLayoutContainer &container,
                                   const MessageLayoutContext &ctx)
 {
-    if (ctx.flags.hasAny(this->getFlags()))
+    if (this->matchesFlags(ctx.flags))
     {
         auto image =
             this->emote_->images.getImageOrLoaded(container.getImageScale());
@@ -936,7 +837,7 @@ void TextElement::addToContainer(MessageLayoutContainer &container,
         }
     }
 
-    if (ctx.flags.hasAny(this->getFlags()))
+    if (this->matchesFlags(ctx.flags))
     {
         auto metrics =
             app->getFonts()->getFontMetrics(this->style_, container.getScale());
@@ -1196,7 +1097,7 @@ void SingleLineTextElement::addToContainer(MessageLayoutContainer &container,
 {
     auto *app = getApp();
 
-    if (ctx.flags.hasAny(this->getFlags()))
+    if (this->matchesFlags(ctx.flags))
     {
         auto metrics =
             app->getFonts()->getFontMetrics(this->style_, container.getScale());
@@ -1399,9 +1300,9 @@ std::unique_ptr<MessageElement> LinkElement::clone() const
 
 MentionElement::MentionElement(const QString &displayName, QString loginName_,
                                const MessageColor &fallbackColor_,
-                               const MessageColor &userColor_)
-    : TextElement(displayName,
-                  {MessageElementFlag::Text, MessageElementFlag::Mention})
+                               const MessageColor &userColor_,
+                               MessageElementFlags messageFlags)
+    : TextElement(displayName, messageFlags)
     , fallbackColor_(fallbackColor_)
     , userColor_(userColor_)
     , userLoginName_(std::move(loginName_))
@@ -1411,9 +1312,9 @@ MentionElement::MentionElement(const QString &displayName, QString loginName_,
 MentionElement::MentionElement(TextElement::CloneTag /* hack */,
                                QStringList words, QString loginName_,
                                const MessageColor &fallbackColor_,
-                               const MessageColor &userColor_)
-    : TextElement(MentionElement::CLONE, std::move(words),
-                  {MessageElementFlag::Text, MessageElementFlag::Mention})
+                               const MessageColor &userColor_,
+                               MessageElementFlags messageFlags)
+    : TextElement(MentionElement::CLONE, std::move(words), messageFlags)
     , fallbackColor_(fallbackColor_)
     , userColor_(userColor_)
     , userLoginName_(std::move(loginName_))
@@ -1501,8 +1402,9 @@ std::unique_ptr<MessageElement> MentionElement::clone() const
 {
     auto elem = std::make_unique<MentionElement>(
         TextElement::CLONE, this->words_, this->userLoginName_,
-        this->fallbackColor_, this->userColor_);
+        this->fallbackColor_, this->userColor_, this->getFlags());
     elem->cloneFrom(*this);
+
     return elem;
 }
 
@@ -1521,10 +1423,28 @@ TimestampElement::TimestampElement(QTime time)
     assert(this->element_ != nullptr);
 }
 
+TimestampElement::TimestampElement(QTime time,
+                                   const MessageElementFlags extraFlags)
+    : MessageElement(extraFlags | MessageElementFlag::Timestamp)
+    , time_(time)
+    , element_(this->formatTime(time))
+{
+    assert(this->element_ != nullptr);
+}
+
+TimestampElement::TimestampElement(TimestampElement::CloneConstructorTag,
+                                   QTime time, const MessageElementFlags flags)
+    : MessageElement(flags)
+    , time_(time)
+    , element_(this->formatTime(time))
+{
+    assert(this->element_ != nullptr);
+}
+
 void TimestampElement::addToContainer(MessageLayoutContainer &container,
                                       const MessageLayoutContext &ctx)
 {
-    if (ctx.flags.hasAny(this->getFlags()))
+    if (this->matchesFlags(ctx.flags))
     {
         this->setTooltip(this->getTooltip());
         if (getSettings()->timestampFormat != this->format_)
@@ -1543,9 +1463,8 @@ TextElement *TimestampElement::formatTime(const QTime &time)
 
     QString format = locale.toString(time, getSettings()->timestampFormat);
 
-    auto *text =
-        new TextElement(format, MessageElementFlag::Timestamp,
-                        MessageColor::System, FontStyle::TimestampMedium);
+    auto *text = new TextElement(format, this->getFlags(), MessageColor::System,
+                                 FontStyle::TimestampMedium);
     text->setLink(this->getLink());
     text->setTooltip(this->getTooltip());
     return text;
@@ -1576,7 +1495,8 @@ std::string_view TimestampElement::type() const
 
 std::unique_ptr<MessageElement> TimestampElement::clone() const
 {
-    auto elem = std::make_unique<TimestampElement>(this->time_);
+    auto elem = std::make_unique<TimestampElement>(
+        TimestampElement::CloneConstructorTag{}, this->time_, this->getFlags());
     elem->cloneFrom(*this);
     return elem;
 }
@@ -1645,7 +1565,7 @@ LinebreakElement::LinebreakElement(MessageElementFlags flags)
 void LinebreakElement::addToContainer(MessageLayoutContainer &container,
                                       const MessageLayoutContext &ctx)
 {
-    if (ctx.flags.hasAny(this->getFlags()))
+    if (this->matchesFlags(ctx.flags))
     {
         container.breakLine();
     }
@@ -1672,16 +1592,18 @@ std::unique_ptr<MessageElement> LinebreakElement::clone() const
 }
 
 ScalingImageElement::ScalingImageElement(ImageSet images,
-                                         MessageElementFlags flags)
+                                         MessageElementFlags flags,
+                                         QString copyText)
     : MessageElement(flags)
     , images_(std::move(images))
+    , copyText_(std::move(copyText))
 {
 }
 
 void ScalingImageElement::addToContainer(MessageLayoutContainer &container,
                                          const MessageLayoutContext &ctx)
 {
-    if (ctx.flags.hasAny(this->getFlags()))
+    if (this->matchesFlags(ctx.flags))
     {
         const auto &image =
             this->images_.getImageOrLoaded(container.getImageScale());
@@ -1700,6 +1622,11 @@ const ImageSet &ScalingImageElement::images() const
     return this->images_;
 }
 
+const QString &ScalingImageElement::copyText() const
+{
+    return this->copyText_;
+}
+
 QJsonObject ScalingImageElement::toJson() const
 {
     auto base = MessageElement::toJson();
@@ -1715,8 +1642,8 @@ std::string_view ScalingImageElement::type() const
 }
 std::unique_ptr<MessageElement> ScalingImageElement::clone() const
 {
-    auto elem =
-        std::make_unique<ScalingImageElement>(this->images_, this->getFlags());
+    auto elem = std::make_unique<ScalingImageElement>(
+        this->images_, this->getFlags(), this->copyText_);
     elem->cloneFrom(*this);
     return elem;
 }
@@ -1734,7 +1661,7 @@ void ReplyCurveElement::addToContainer(MessageLayoutContainer &container,
     static const int radius = 6;         // Radius of the top left corner
     static const int margin = 2;         // Top/Left/Bottom margin
 
-    if (ctx.flags.hasAny(this->getFlags()))
+    if (this->matchesFlags(ctx.flags))
     {
         float scale = container.getScale();
         container.addElement(

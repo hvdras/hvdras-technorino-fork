@@ -99,6 +99,19 @@ enum class EmoteTooltipScale : std::uint8_t {
     Huge,
 };
 
+enum class TwitchReadConnectionMode : uint8_t {
+    Authenticated,
+    Anonymous,
+    AnonymousParallel,
+};
+
+enum class KickConnectionPreference : uint8_t {
+    Default = 0,
+    Pusher = (1 << 0),
+    Centrifugo = (1 << 1),
+    Any = Pusher | Centrifugo,
+};
+
 constexpr std::optional<std::string_view> qmagicenumDisplayName(
     EmoteTooltipScale value) noexcept
 {
@@ -111,6 +124,22 @@ constexpr std::optional<std::string_view> qmagicenumDisplayName(
         case EmoteTooltipScale::Large:
         case EmoteTooltipScale::Huge:
             return {};
+    }
+}
+
+constexpr std::optional<std::string_view> qmagicenumDisplayName(
+    TwitchReadConnectionMode value) noexcept
+{
+    switch (value)
+    {
+        case TwitchReadConnectionMode::Authenticated:
+            return "Authenticated (default)";
+
+        case TwitchReadConnectionMode::Anonymous:
+            return {};
+
+        case TwitchReadConnectionMode::AnonymousParallel:
+            return "Anonymous (parallel)";
     }
 }
 
@@ -159,6 +188,22 @@ public:
 
     /// Appearance
     BoolSetting showTimestamps = {"/appearance/messages/showTimestamps", true};
+    BoolSetting showHeaderTimestamps = {
+        "/appearance/messages/header/showTimestamps",
+        false,
+    };
+    BoolSetting showAnnouncementHeader = {
+        "/appearance/messages/announcements/showHeader",
+        true,
+    };
+    BoolSetting showSubscriptionHeader = {
+        "/appearance/messages/subscriptions/showHeader",
+        true,
+    };
+    BoolSetting showWatchStreakHeader = {
+        "/appearance/messages/watchstreaks/showHeader",
+        true,
+    };
     BoolSetting animationsWhenFocused = {
         "/appearance/enableAnimationsWhenFocused", false};
     BoolSetting hideMessageTimestampsWhenLive = {
@@ -182,6 +227,14 @@ public:
                                      false};
     EnumSetting<MessageOverflow> messageOverflow = {
         "/appearance/messages/messageOverflow", MessageOverflow::Highlight};
+    BoolSetting wrapAsciiArt = {
+        "/appearance/messages/wrapAsciiArt",
+        false,
+    };
+    BoolSetting showTwitchGifs = {
+        "/appearance/messages/showTwitchGifs",
+        true,
+    };
     BoolSetting separateMessages = {"/appearance/messages/separateMessages",
                                     false};
     BoolSetting fadeMessageHistory = {"/appearance/messages/fadeMessageHistory",
@@ -202,6 +255,10 @@ public:
     EnumSetting<NotebookTabVisibility> tabVisibility = {
         "/appearance/tabVisibility",
         NotebookTabVisibility::AllTabs,
+    };
+    BoolSetting growWrappedNotebookLines = {
+        "/appearance/growWrappedNotebookLines",
+        false,
     };
 
     //    BoolSetting collapseLongMessages =
@@ -444,9 +501,6 @@ public:
     BoolSetting showUnlistedSevenTVEmotes = {
         "/emotes/showUnlistedSevenTVEmotes", false};
 
-    /// Twitch inline chat GIFs (sent via the GIF picker)
-    BoolSetting enableTwitchGifMessages = {"/twitch/enableGifMessages", true};
-    IntSetting twitchGifMessageSize = {"/twitch/gifMessageSize", 128};
     /**
      * This setting is kept for backwards compatibility.
      */
@@ -764,7 +818,6 @@ public:
         "/external/imageUploader/deletionLink", ""};
 
     /// Misc
-    BoolSetting anonRead = {"/misc/anonRead", false};
     BoolSetting markdownParsing = {"/misc/markdownParsing", false};
     BoolSetting autoDetachLiveTab = {"/misc/autoDetachLiveTab", false};
     BoolSetting watchingTabLiveSound = {"/misc/watchingTabLiveSound", false};
@@ -788,6 +841,7 @@ public:
 
     BoolSetting loadTwitchMessageHistoryOnConnect = {
         "/misc/twitch/loadMessageHistoryOnConnect", true};
+    QStringSetting messageHistoryUrl = {"/misc/twitch/messageHistoryUrl", ""};
     IntSetting twitchMessageHistoryLimit = {
         "/misc/twitch/messageHistoryLimit",
         800,
@@ -802,6 +856,15 @@ public:
     };
     BoolSetting displaySevenTVAnimatedProfile = {
         "/misc/displaySevenTVAnimatedProfile", true};
+
+    EnumStringSetting<TwitchReadConnectionMode> twitchReadConnectionMode = {
+        "/misc/x-7tv/twitchReadConnectionMode",
+        TwitchReadConnectionMode::Authenticated};
+
+    EnumStringSetting<KickConnectionPreference> kickConnectionPreference = {
+        "/misc/x-7tv/kick/connectionPreference",
+        KickConnectionPreference::Default,
+    };
 
     EnumStringSetting<ChatSendProtocol> chatSendProtocol = {
         "/misc/chatSendProtocol", ChatSendProtocol::Default};

@@ -19,9 +19,14 @@ namespace chatterino::lua::api::message {
 ---@field flags c2.MessageElementFlag The element's flags
 ---@field tooltip string The tooltip (if any)
 ---@field trailing_space boolean Whether to add a trailing space after the element
+---@field exhaustive_flags boolean Whether the element checks all of its flags for existence when performing a layout
 ---@field link c2.Link An action when clicking on this element. Mention and Link elements don't support this. They manage the link themselves.
 c2.MessageElementBase = {}
 -- ^^^ this is kinda fake - this table doesn't exist in Lua, we only declare it to add methods
+
+--- Returns the pretty-printed JSON representation of the element.
+--- This is meant for debugging and is subject to change.
+function c2.MessageElementBase:to_json() end
 
 --- Add flags to this element
 ---
@@ -33,6 +38,7 @@ function c2.MessageElementBase:add_flags(flags) end
 ---@field tooltip? string Tooltip text
 ---@field trailing_space? boolean Whether to add a trailing space after the element (default: true)
 ---@field link? c2.Link An action when clicking on this element. Mention and Link elements don't support this. They manage the link themselves.
+---@field exhaustive_flags? boolean Whether this message should only be laid out if all its flags exist in the message layout context.
 
 ---@class c2.TextElement : c2.MessageElementBase
 ---@field type "text"
@@ -171,7 +177,6 @@ function c2.MessageElementBase:add_flags(flags) end
 ---A chat message
 ---@class c2.Message
 ---@field flags c2.MessageFlag The message's flags
----@field parse_time number Time the message was parsed (in milliseconds since epoch)
 ---@field id string The message ID
 ---@field search_text string Text to check when searching for messages
 ---@field message_text string Text content of this message (used for filters for example)
@@ -205,7 +210,6 @@ function c2.Message:clone() end
 ---@class MessageInit
 ---@field flags? c2.MessageFlag Message flags (see `c2.MessageFlags`)
 ---@field id? string The (ideally unique) message ID
----@field parse_time? number Time the message was parsed (in milliseconds since epoch)
 ---@field search_text? string Text to that is compared when searching for messages
 ---@field message_text? string The message text (used for filters for example)
 ---@field login_name? string The login name of the sender

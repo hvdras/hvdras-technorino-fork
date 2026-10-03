@@ -15,6 +15,7 @@
 #include "singletons/Paths.hpp"
 #include "singletons/Settings.hpp"
 #include "singletons/Theme.hpp"
+#include "util/Backup.hpp"
 #include "util/CombinePath.hpp"
 #include "util/FilesystemHelpers.hpp"
 #include "util/MultiChannel.hpp"
@@ -82,6 +83,8 @@ using SplitNode = SplitContainer::Node;
 void WindowManager::showSettingsDialog(QWidget *parent,
                                        SettingsDialogPreference preference)
 {
+    using namespace std::chrono_literals;
+
     if (this->appArgs.dontSaveSettings)
     {
         QMessageBox::critical(parent, "Chatterino - Editing Settings Forbidden",
@@ -90,8 +93,9 @@ void WindowManager::showSettingsDialog(QWidget *parent,
     }
     else
     {
-        QTimer::singleShot(80, [parent, preference] {
-            SettingsDialog::showDialog(parent, preference);
+        auto *mainWindow = &this->getMainWindow();
+        QTimer::singleShot(80ms, mainWindow, [mainWindow, preference] {
+            SettingsDialog::showDialog(mainWindow, preference);
         });
     }
 }
@@ -138,6 +142,10 @@ WindowManager::WindowManager(const Args &appArgs_, const Paths &paths,
     qCDebug(chatterinoWindowmanager) << "init WindowManager";
 
     this->updateWordTypeMaskListener.add(settings.showTimestamps);
+    this->updateWordTypeMaskListener.add(settings.showHeaderTimestamps);
+    this->updateWordTypeMaskListener.add(settings.showAnnouncementHeader);
+    this->updateWordTypeMaskListener.add(settings.showSubscriptionHeader);
+    this->updateWordTypeMaskListener.add(settings.showWatchStreakHeader);
     this->updateWordTypeMaskListener.add(settings.showBadgesGlobalAuthority);
     this->updateWordTypeMaskListener.add(settings.showBadgesPredictions);
     this->updateWordTypeMaskListener.add(settings.showBadgesChannelAuthority);
@@ -148,7 +156,6 @@ WindowManager::WindowManager(const Args &appArgs_, const Paths &paths,
     this->updateWordTypeMaskListener.add(settings.showBadgesBttv);
     this->updateWordTypeMaskListener.add(settings.showBadgesSevenTV);
     this->updateWordTypeMaskListener.add(settings.enableEmoteImages);
-    this->updateWordTypeMaskListener.add(settings.enableTwitchGifMessages);
     this->updateWordTypeMaskListener.add(settings.lowercaseDomains);
     this->updateWordTypeMaskListener.add(settings.showReplyButton);
 
@@ -221,6 +228,23 @@ void WindowManager::updateWordTypeMask()
     {
         flags.set(MEF::Timestamp);
     }
+    if (settings->showHeaderTimestamps)
+    {
+        flags.set(MEF::HeaderTimestamp);
+    }
+    if (settings->showAnnouncementHeader)
+    {
+        flags.set(MEF::AnnouncementHeader);
+    }
+    if (settings->showSubscriptionHeader)
+    {
+        flags.set(MEF::SubscriptionHeader);
+    }
+    if (settings->showWatchStreakHeader)
+    {
+        flags.set(MEF::WatchStreakHeader);
+    }
+    flags.set(MEF::Mention);
 
     // emotes
     if (settings->enableEmoteImages)
@@ -229,12 +253,6 @@ void WindowManager::updateWordTypeMask()
     }
     flags.set(MEF::EmoteText);
     flags.set(MEF::EmojiText);
-
-    // Twitch inline chat GIFs
-    if (settings->enableTwitchGifMessages)
-    {
-        flags.set(MEF::TwitchGifImage);
-    }
 
     // bits
     flags.set(MEF::BitsAmount);
@@ -269,6 +287,7 @@ void WindowManager::updateWordTypeMask()
     flags.set(MEF::Collapsed);
     flags.set(MEF::LowercaseLinks, settings->lowercaseDomains);
     flags.set(MEF::ChannelPointReward);
+    flags.set(MEF::TwitchGif);
 
     // update flags
     MessageElementFlags newFlags = static_cast<MessageElementFlags>(flags);
@@ -384,7 +403,7 @@ Window &WindowManager::createWindow(WindowType type,
     }
 
     this->windows_.push_back(window);
-    if (args.parent)
+    if (args.show)
     {
         window->show();
     }
@@ -463,7 +482,23 @@ void WindowManager::initialize()
         }
         else
         {
-            windowLayout = this->loadWindowLayoutFromFile();
+            backup::loadWithBackups(
+                backup::FileData{
+                    .fileName = WindowManager::WINDOW_LAYOUT_FILENAME,
+                    .directory = getApp()->getPaths().settingsDirectory,
+                    .fileKind = u"Window layout"_s,
+                    .fileDescription =
+                        u"This file contains the positions of open windows, their tabs and splits."_s,
+                },
+                [&]() -> ExpectedStr<void> {
+                    auto res = this->loadWindowLayoutFromFile();
+                    if (!res)
+                    {
+                        return makeUnexpected(std::move(res).error());
+                    }
+                    windowLayout = *std::move(res);
+                    return {};
+                });
         }
 
         auto desired = this->appArgs.activateChannel;
@@ -740,7 +775,7 @@ void WindowManager::incGeneration()
     this->generation_++;
 }
 
-WindowLayout WindowManager::loadWindowLayoutFromFile() const
+ExpectedStr<WindowLayout> WindowManager::loadWindowLayoutFromFile() const
 {
     return WindowLayout::loadFromFile(this->windowLayoutFilePath);
 }

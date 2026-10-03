@@ -12,32 +12,32 @@
 #include <QVariantMap>
 
 #include <unordered_map>
+#include <variant>
 
 namespace chatterino {
 
+struct TwitchGifOccurrence {
+    /// The giphy ID.
+    QString id;
+
+    bool operator==(const TwitchGifOccurrence &rhs) const = default;
+};
+
 struct TwitchEmoteOccurrence {
-    int start;
-    int end;
     EmotePtr ptr;
     EmoteName name;
-    /// True for an occurrence parsed from the `gifs` tag (Twitch's inline
-    /// chat GIFs) rather than the `emotes` tag - splices into the message
-    /// the same way a real emote does, but renders as a TwitchGifElement
-    /// instead of an EmoteElement so it has its own visibility/size
-    /// settings. See parseTwitchGifs.
-    bool isGif = false;
-    /// For a GIF occurrence, the same GIF at its original (full-size,
-    /// undownsized) quality - tried if `ptr`'s downsized rendition fails to
-    /// load (e.g. Giphy doesn't have a "downsized" variant for it), before
-    /// giving up and falling back to text entirely. Null for real emote
-    /// occurrences.
-    EmotePtr fallbackPtr;
 
-    bool operator==(const TwitchEmoteOccurrence &other) const
-    {
-        return std::tie(this->start, this->end, this->ptr, this->name) ==
-               std::tie(other.start, other.end, other.ptr, other.name);
-    }
+    bool operator==(const TwitchEmoteOccurrence &rhs) const = default;
+};
+
+struct TwitchSpecialOccurrence {
+    /// Start position in the message (in utf16 units)
+    int start = 0;
+    /// Length of the occurrence (in utf16 units)
+    int length = 0;
+    std::variant<TwitchEmoteOccurrence, TwitchGifOccurrence> data;
+
+    bool operator==(const TwitchSpecialOccurrence &other) const = default;
 };
 
 /// @brief Parses the `badge-info` tag of an IRC message
@@ -67,7 +67,7 @@ std::unordered_map<QString, QString> parseBadgeInfoTag(Communi::TagsRef tags);
 std::vector<TwitchBadge> parseBadgeTag(Communi::TagsRef tags,
                                        const QString &tagName = "badges");
 
-/// @brief Parses Twitch emotes in an IRC message
+/// @brief Parses special Twitch occurrences (e.g. emotes) in an IRC message
 ///
 /// @param tags The tags of the IRC message
 /// @param content The message text. This might be shortened due to skipping
@@ -78,26 +78,8 @@ std::vector<TwitchBadge> parseBadgeTag(Communi::TagsRef tags,
 ///                      `content` excludes the first three characters of the
 ///                      original message (`@a foo` (original message) -> `foo`
 ///                      (content)).
-/// @returns A list of emotes and their positions
-std::vector<TwitchEmoteOccurrence> parseTwitchEmotes(Communi::TagsRef tags,
-                                                     const QString &content,
-                                                     int messageOffset);
-
-/// @brief Parses Twitch's inline chat GIFs (the `gifs` tag) in an IRC message
-///
-/// The `gifs` tag is a comma-separated list of
-/// `<start position>-<end position>|<gifID>|<gifURL>` entries, using the
-/// same position convention as the `emotes` tag. The returned occurrences
-/// have `isGif` set and splice into the message the same way emotes do.
-///
-/// @param tags The tags of the IRC message
-/// @param content The message text - see parseTwitchEmotes for the same
-///                messageOffset caveat.
-/// @param messageOffset The offset of `content` compared to the original
-///                      message text - see parseTwitchEmotes.
-/// @returns A list of GIF occurrences and their positions
-std::vector<TwitchEmoteOccurrence> parseTwitchGifs(Communi::TagsRef tags,
-                                                   const QString &content,
-                                                   int messageOffset);
+/// @returns A list of their positions
+std::vector<TwitchSpecialOccurrence> parseTwitchOccurrences(
+    Communi::TagsRef tags, QStringView content, int messageOffset);
 
 }  // namespace chatterino

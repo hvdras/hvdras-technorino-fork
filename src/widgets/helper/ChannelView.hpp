@@ -208,7 +208,7 @@ public:
 
     std::vector<MessageLayoutPtr> &getMessagesSnapshot();
 
-    void queueLayout();
+    void queueLayout(bool disableAnimation = false);
     void invalidateBuffers();
 
     // --- Banner/overlay rendering helpers (used by PinnedMessageBanner) ---
@@ -330,7 +330,7 @@ private:
 
     void layoutVisibleMessages(const std::vector<MessageLayoutPtr> &messages);
     void updateScrollbar(const std::vector<MessageLayoutPtr> &messages,
-                         bool causedByScrollbar, bool causedByShow);
+                         bool causedByScrollbar, bool disableAnimation);
 
     void drawMessages(QPainter &painter, const QRect &area);
     void setSelection(const SelectionItem &start, const SelectionItem &end);

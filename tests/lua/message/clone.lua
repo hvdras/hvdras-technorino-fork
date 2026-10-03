@@ -10,7 +10,6 @@ local tests = {
         local msg = c2.Message.new({
             flags = c2.MessageFlag.DoNotTriggerNotification,
             id = "123",
-            parse_time = 12345678,
             search_text = "search",
             message_text = "message text",
             login_name = "login",
@@ -22,7 +21,7 @@ local tests = {
             server_received_time = 123345678,
             highlight_color = "#00ff00",
             elements = {
-                { type = "text", text = "abcde" },
+                { type = "text", text = "abcde", exhaustive_flags = true },
                 { type = "twitch-moderation" },
             },
         })
@@ -35,7 +34,6 @@ local tests = {
         assert(msg ~= clone)
         assert(msg.flags == clone.flags)
         assert(msg.id == clone.id)
-        assert(msg.parse_time == clone.parse_time)
         assert(msg.search_text == clone.search_text)
         assert(msg.message_text == clone.message_text)
         assert(msg.login_name == clone.login_name)
@@ -47,6 +45,9 @@ local tests = {
         assert(msg.server_received_time == clone.server_received_time)
         assert(msg.highlight_color == clone.highlight_color)
         assert(#msg:elements() == #clone:elements())
+        for i, element in pairs(msg:elements()) do
+            assert(element:to_json() == clone:elements()[i]:to_json())
+        end
     end,
 }
 
