@@ -346,8 +346,9 @@ private:
                                     const MessageLayoutPtr &layout);
     void addTwitchLinkContextMenuItems(
         QMenu *menu, const MessageLayoutElement *hoveredElement);
-    void addCommandExecutionContextMenuItems(QMenu *menu,
-                                             const MessageLayoutPtr &layout);
+    void addCommandExecutionContextMenuItems(
+        QMenu *menu, const MessageLayoutElement *hoveredElement,
+        const MessageLayoutPtr &layout);
     void translateMessage(const MessagePtr &message);
 
     int getLayoutWidth() const;
