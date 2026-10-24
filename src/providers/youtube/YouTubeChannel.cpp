@@ -690,17 +690,36 @@ MessagePtr makeYouTubeDeletionMessage(const MessagePtr &original)
 /// ShowInMentions flags and highlight color directly on the message; the
 /// returned alert still needs to reach MessageBuilder::triggerHighlights to
 /// actually play a sound or flash the taskbar.
-HighlightAlert processYouTubeHighlights(MessageBuilder &builder)
+HighlightAlert processYouTubeHighlights(MessageBuilder &builder,
+                                        YouTubeChannel &channel)
 {
     if (getSettings()->isBlacklistedUser(builder->loginName))
     {
         return {};
     }
 
+    auto currentUser = getApp()->getAccounts()->youtube.current();
+    bool self = !currentUser->isAnonymous() &&
+                (builder->loginName.compare(currentUser->channelName(),
+                                            Qt::CaseInsensitive) == 0 ||
+                 builder->loginName.compare(currentUser->handle(),
+                                            Qt::CaseInsensitive) == 0);
+
     MessageParseArgs args;
-    auto [highlighted, highlightResult] = getApp()->getHighlights()->check(
-        args, {}, builder->loginName, builder->messageText, builder->flags,
-        builder->platform);
+    auto [highlighted, highlightResult] = getApp()->getHighlights()->check({
+        .args = args,
+        .twitchBadges = {},
+        .senderName = builder->loginName,
+        .originalMessage = builder->messageText,
+        .messageFlags = builder->flags,
+        .self = self,
+        .runContext =
+            filters::RunContext{
+                .message = builder.message(),
+                .channel = &channel,
+            },
+        .platform = builder->platform,
+    });
 
     if (!highlighted)
     {
@@ -716,8 +735,7 @@ HighlightAlert processYouTubeHighlights(MessageBuilder &builder)
     }
 
     return {
-        .customSound = highlightResult.customSoundUrl.value_or(QUrl{}),
-        .playSound = highlightResult.playSound,
+        .sound = highlightResult.sound,
         .windowAlert = highlightResult.alert,
     };
 }
@@ -1835,7 +1853,7 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation, int generation)
                     builder, *self, self->broadcasterChannelId_, renderer,
                     !self->receivedFirstBatch_);
 
-                auto alert = processYouTubeHighlights(builder);
+                auto alert = processYouTubeHighlights(builder, *self);
                 pendingMessages.push_back(
                     {timestampUsec, builder.release(), alert});
             }

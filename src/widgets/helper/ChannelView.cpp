@@ -1423,9 +1423,7 @@ void ChannelView::messageAppended(MessagePtr &message,
              messageFlags->has(MessageFlag::ShowInMentions) &&
              !messageFlags->has(MessageFlag::Subscription) &&
              (getSettings()->highlightMentions ||
-              this->channel_->getType() != Channel::Type::TwitchMentions)) ||
-            (this->channel_->getType() == Channel::Type::TwitchAutomod &&
-             getSettings()->enableAutomodHighlight))
+              this->channel_->getType() != Channel::Type::TwitchMentions)))
         {
             this->tabHighlightRequested.invoke(HighlightState::Highlighted,
                                                message->highlightColor);
