@@ -164,7 +164,7 @@ QString doYouTubeDelete(const CommandContext &ctx)
     }
 
     ctx.youtubeChannel->deleteMessage(msg->id, msg->userID,
-                                      msg->serverReceivedTime,
+                                      msg->timestamp,
                                       msg->messageText);
     return {};
 }

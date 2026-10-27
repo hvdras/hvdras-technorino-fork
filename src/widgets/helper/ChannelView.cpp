@@ -3049,7 +3049,7 @@ void ChannelView::addMessageContextMenuItems(QMenu *menu,
                 else if (auto *yc = dynamic_cast<YouTubeChannel *>(chan.get()))
                 {
                     yc->deleteMessage(messagePtr->id, messagePtr->userID,
-                                      messagePtr->serverReceivedTime,
+                                      messagePtr->timestamp,
                                       messagePtr->messageText);
                 }
             });

@@ -1816,13 +1816,13 @@ void YouTubeChannel::fetchLiveChat(const QString &continuation, int generation)
 
                 if (timestampUsec > 0)
                 {
-                    builder->serverReceivedTime =
+                    builder->timestamp =
                         QDateTime::fromMSecsSinceEpoch(timestampUsec / 1000);
                 }
 
                 builder.emplace<TimestampElement>(
-                    builder->serverReceivedTime.isValid()
-                        ? builder->serverReceivedTime.toLocalTime().time()
+                    builder->timestamp.isValid()
+                        ? builder->timestamp.toLocalTime().time()
                         : QTime::currentTime());
 
                 // Adds the moderation-mode action buttons configured in
