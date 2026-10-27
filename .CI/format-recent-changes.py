@@ -69,7 +69,7 @@ def run_git_command(args: list[str]) -> str:
 
 def get_last_version_tag() -> str | None:
     try:
-        return run_git_command(["describe", "--tags", "--abbrev=0", "--match", "v7*"])
+        return run_git_command(["describe", "--tags", "--abbrev=0", "--match", "v2*"])
     except subprocess.CalledProcessError:
         return None
 
