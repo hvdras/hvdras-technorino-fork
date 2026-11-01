@@ -38,6 +38,7 @@
 #include "widgets/splits/Split.hpp"
 #include "widgets/splits/SplitContainer.hpp"
 #include "widgets/TooltipWidget.hpp"
+#include "widgets/Window.hpp"
 
 #include <QDrag>
 #include <QHBoxLayout>
@@ -594,36 +595,6 @@ std::unique_ptr<QMenu> SplitHeader::createMainMenu()
                 h->getDisplaySequence(HotkeyCategory::Split, "openModView"),
                 this->split_, &Split::openModViewInBrowser);
         }
-
-        if (twitchChannel)
-        {
-            menu->addAction(
-                    "Create a clip",
-                    h->getDisplaySequence(HotkeyCategory::Split, "createClip"),
-                    this->split_,
-                    [twitchChannel] {
-                        twitchChannel->createClip({}, {});
-                    })
-                ->setVisible(twitchChannel->isLive());
-        }
-
-        if (this->split_->getIndirectChannel().getType() ==
-            Channel::Type::TwitchWatching)
-        {
-            menu->addAction("Reset /watching", this->split_, [] {
-                if (!getApp()
-                         ->getTwitch()
-                         ->getWatchingChannel()
-                         .get()
-                         ->isEmpty())
-                {
-                    getApp()->getTwitch()->setWatchingChannel(
-                        Channel::getEmpty());
-                }
-            });
-        }
-
-        menu->addSeparator();
     }
 
     if (dynamic_cast<YouTubeChannel *>(selected.get()))

@@ -620,6 +620,8 @@ CommandController::CommandController(const Paths &paths)
     this->registerCommand("/c2-theme-autoreload", &commands::toggleThemeReload);
 }
 
+CommandController::~CommandController() = default;
+
 void CommandController::save()
 {
     this->sm_->save();
