@@ -4,6 +4,7 @@
 #include "common/network/NetworkResult.hpp"
 
 #include <QJsonArray>
+#include <QJsonObject>
 #include <QJsonValue>
 #include <QHash>
 #include <QUrl>
@@ -18,38 +19,33 @@ namespace {
 
 constexpr int MAX_TRANSLATION_TEXT_LENGTH = 1200;
 
-std::optional<TranslationResult> parseGoogleTranslationResult(
+std::optional<TranslationResult> parseMyMemoryTranslationResult(
     const NetworkResult &result)
 {
-    const auto root = result.parseJsonArray();
-    const auto segments = root.isEmpty() ? QJsonArray{} : root.at(0).toArray();
-    if (segments.isEmpty())
+    const auto root = result.parseJson();
+    if (root.isEmpty())
     {
         return std::nullopt;
     }
 
-    QString translated;
-    for (const auto &segmentValue : segments)
+    // MyMemory returns HTTP 200 even for quota/error states; check the
+    // JSON responseStatus field (200 = OK, 429 = quota exceeded, etc.)
+    const int responseStatus = root["responseStatus"].toInt();
+    if (responseStatus != 200)
     {
-        const auto segment = segmentValue.toArray();
-        if (!segment.isEmpty())
-        {
-            translated += segment.at(0).toString();
-        }
+        return std::nullopt;
     }
-    translated = translated.trimmed();
+
+    const auto translated =
+        root["responseData"]["translatedText"].toString().trimmed();
     if (translated.isEmpty())
     {
         return std::nullopt;
     }
 
-    auto detectedLanguage = root.size() > 2
-                                ? normalizedLanguageCode(root.at(2).toString())
-                                : QString{};
-
     return TranslationResult{
         .translatedText = translated,
-        .detectedLanguage = detectedLanguage,
+        .detectedLanguage = {},
     };
 }
 
@@ -108,7 +104,7 @@ const std::vector<TranslationLanguage> &supportedTranslationLanguages()
         {QStringLiteral("ht"), QStringLiteral("Haitian Creole")},
         {QStringLiteral("ha"), QStringLiteral("Hausa")},
         {QStringLiteral("haw"), QStringLiteral("Hawaiian")},
-        {QStringLiteral("iw"), QStringLiteral("Hebrew")},
+        {QStringLiteral("he"), QStringLiteral("Hebrew")},
         {QStringLiteral("hi"), QStringLiteral("Hindi")},
         {QStringLiteral("hu"), QStringLiteral("Hungarian")},
         {QStringLiteral("is"), QStringLiteral("Icelandic")},
@@ -202,7 +198,7 @@ QString translationLanguageCodeFromInput(QString language)
         {"zh-hant", QStringLiteral("zh-tw")},
         {"tw", QStringLiteral("zh-tw")},
         {"traditional-chinese", QStringLiteral("zh-tw")},
-        {"he", QStringLiteral("iw")},
+        {"iw", QStringLiteral("he")},
         {"fil", QStringLiteral("tl")},
         {"filipino", QStringLiteral("tl")},
         {"burmese", QStringLiteral("my")},
@@ -286,14 +282,11 @@ void requestTextTranslation(const QString &text, const QString &targetLanguage,
 
     const auto target = normalizedTranslationTargetLanguage(targetLanguage);
 
-    QUrl url(QStringLiteral(
-        "https://translate.googleapis.com/translate_a/single"));
+    QUrl url(QStringLiteral("https://api.mymemory.translated.net/get"));
     QUrlQuery query;
-    query.addQueryItem(QStringLiteral("client"), QStringLiteral("gtx"));
-    query.addQueryItem(QStringLiteral("sl"), QStringLiteral("auto"));
-    query.addQueryItem(QStringLiteral("tl"), target);
-    query.addQueryItem(QStringLiteral("dt"), QStringLiteral("t"));
     query.addQueryItem(QStringLiteral("q"), requestText);
+    query.addQueryItem(QStringLiteral("langpair"),
+                       QStringLiteral("auto|") + target);
     url.setQuery(query);
 
     auto request = NetworkRequest(url)
@@ -301,7 +294,7 @@ void requestTextTranslation(const QString &text, const QString &targetLanguage,
                        .onSuccess([onSuccess, onError](
                                       const NetworkResult &result) {
                            const auto parsed =
-                               parseGoogleTranslationResult(result);
+                               parseMyMemoryTranslationResult(result);
                            if (!parsed.has_value())
                            {
                                if (onError)
@@ -318,11 +311,11 @@ void requestTextTranslation(const QString &text, const QString &targetLanguage,
                            }
                        })
                        .onError([onError](const NetworkResult &result) {
-                           (void)result;
                            if (onError)
                            {
-                               onError(QStringLiteral(
-                                   "Translation failed: network error."));
+                               onError(
+                                   QStringLiteral("Translation failed: HTTP %1.")
+                                       .arg(result.status()));
                            }
                        })
                        .finally([onFinished] {
